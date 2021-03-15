@@ -152,7 +152,8 @@ def pi_2_pi(angle):
 
 class PurePursuitPlanner:
     """
-    Example Planner
+    This is the PurePursuit ALgorithm that is traccking the desired path. In this case we are following the curvature
+    optimal raceline.
     """
     def __init__(self, conf, wb):
         self.wheelbase = wb
@@ -161,10 +162,11 @@ class PurePursuitPlanner:
         self.max_reacquire = 20.
 
     def load_waypoints(self, conf):
-        # load waypoints
+        # Loading the x and y waypoints in the "..._raceline.vsv" that include the path to follow
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
     def _get_current_waypoint(self, waypoints, lookahead_distance, position, theta):
+        # Find the current waypoint on the map and calculate the lookahead point for the controller
         wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
         nearest_point, nearest_dist, t, i = nearest_point_on_trajectory(position, wpts)
         if nearest_dist < lookahead_distance:
@@ -194,103 +196,6 @@ class PurePursuitPlanner:
 
         return speed, steering_angle
 
-class StanleyPlanner:
-    """
-    Front-Wheel Feedback Controller (Stanley)
-    """
-    def __init__(self, conf, wb):
-        self.wheelbase = wb
-        self.conf = conf
-        self.load_waypoints(conf)
-        self.max_reacquire = 20.
-        self.ind_old = 0
-
-    def load_waypoints(self, conf):
-        # load waypoints
-        self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
-
-    def calc_theta_and_ef(self, pose_x, pose_y, pose_theta, veloctiy, waypoints):
-        " calc theta and ef"
-        " Theta is the heading of the car, this heading must be minimized"
-        " ef = crosstrack error/The distance from the optimal path"
-        " ef = lateral distance in frenet frame (front wheel)"
-
-        # Calculate Position of the front axle and closest point to it
-        fx = pose_x + self.wheelbase * math.cos(pose_theta)
-        fy = pose_y + self.wheelbase * math.sin(pose_theta)
-        #position_front_axle = np.array([fx, fy])
-        #nearest_point_front, nearest_dist, t, i = nearest_point_on_trajectory(position_front_axle, wpts)
-
-        #### Calculate closest point to the front axle
-        # Extract the individual waypoints
-        wpts_x = self.waypoints[:,[1]]
-        wpts_y = self.waypoints[:,[2]]
-        wpts_yaw = self.waypoints[:,[3]]
-        wpts_veloctiy = self.waypoints[:, [5]]
-        wpts_x2 = wpts_x.tolist()
-        wpts_y2 = wpts_y.tolist()
-        wpts_yaw2 = wpts_yaw.tolist()
-
-        # Calculate the Distances from the front axle to all the waypoints
-        dx = [fx - x for x in wpts_x2]
-        dy = [fy - y for y in wpts_y2]
-
-        # Find the target index for the correct waypoint by finding the index with the lowest value
-        target_index = int(np.argmin(np.hypot(dx, dy)))
-        target_index = max(self.ind_old, target_index)
-        self.ind_old = max(self.ind_old, target_index)
-
-        ###################     Calculate the current Cross-Track Error ef in [m]
-
-        # Project crosstrack error onto front axle vector
-        front_axle_vec_rot_90 = np.array([[math.cos(pose_theta - math.pi / 2.0)],
-                                          [math.sin(pose_theta - math.pi / 2.0)]])
-
-        vec_target_2_front = np.array([dx[target_index], dy[target_index]])
-
-        # Caculate the cross-track error ef by
-        ef = np.dot(vec_target_2_front.T, front_axle_vec_rot_90)
-
-
-        ###################     Calculate the heading error theta_e  normalized to an angle to [-pi, pi]
-
-        # Extract heading on the raceline - different COSY in calculation so add of pi/2 = 90 degrees
-        theta_raceline = wpts_yaw2[target_index][0] + math.pi/2
-        # Calculate the heading error by taking the difference between current and goal + Normalize the angles
-        theta_e = pi_2_pi(theta_raceline - pose_theta)
-
-        # Calculate the target Veloctiy for the desired state
-        goal_veloctiy = wpts_veloctiy[target_index][0]
-
-        return theta_e, ef, target_index, goal_veloctiy
-
-    def controller(self, pose_x, pose_y, pose_theta, velocity, waypoints):
-        " Front Wheel Feedback Controller to track the path "
-        " Based on the heading error theta_e and the crosstrack error ef we calculate the steering angle"
-        " Returns the optimal steering angle delta is P-Controller with the proportional gain k"
-
-        k_path =5.2                 # Proportional gain for path control
-        k_veloctiy = 0.75         # Proportional gain for speed control
-        theta_e, ef, target_index, goal_veloctiy = self.calc_theta_and_ef(pose_x, pose_y, pose_theta, velocity, waypoints)
-
-        # Caculate steering angle based on the cross track error to the front axle in [rad]
-        cte_front = math.atan2(k_path * ef, velocity)
-        # Calculate final steering angle/ control input "delta" in [rad]: Crosstrack error ef + heading error
-        delta = cte_front + theta_e
-        # Calculate final speed control input in [m/s]:
-        #speed_diff = k_veloctiy * (goal_veloctiy-velocity)
-        speed = k_veloctiy * goal_veloctiy
-
-        return delta, speed
-
-    def plan(self, pose_x, pose_y, pose_theta, lookahead_distance, velocity, vgain):
-        #vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
-        #Calculate the steering angle and the speed in the controller
-        delta, speed = self.controller(pose_x, pose_y, pose_theta, velocity, self.waypoints)
-
-        return speed, delta
-
-
 if __name__ == '__main__':
 
     work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.90338203837889}
@@ -299,13 +204,10 @@ if __name__ == '__main__':
     conf = Namespace(**conf_dict)
 
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
-    #obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta],[conf.sx2, conf.sy2, conf.stheta2],[conf.sx3, conf.sy3, conf.stheta3]]))
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
     env.render()
-    planner = StanleyPlanner(conf, 0.17145 + 0.15875)
-    #planner = PurePursuitPlanner(conf, 0.17145+0.15875)
-    #planner2 = PurePursuitPlanner(conf, 0.17145+0.15875)
-    #planner3 = PurePursuitPlanner(conf, 0.17145+0.15875)
+    planner = PurePursuitPlanner(conf, 0.17145+0.15875)
+
 
 
     laptime = 0.0
@@ -313,11 +215,7 @@ if __name__ == '__main__':
 
     while not done:
         speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], work['tlad'], obs['linear_vels_x'][0], work['vgain'])
-        #speed2, steer2 = planner2.plan(obs['poses_x'][1], obs['poses_y'][1], obs['poses_theta'][1], work['tlad'], work['vgain'])
-        #speed3, steer3 = planner3.plan(obs['poses_x'][2], obs['poses_y'][2], obs['poses_theta'][2], work['tlad'],work['vgain'])
 
-
-        #obs, step_reward, done, info = env.step(np.array([[steer, speed],[steer2, speed2],[steer3, speed3]]))
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
         env.render(mode='human_fast')
