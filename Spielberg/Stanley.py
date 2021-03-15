@@ -203,6 +203,7 @@ class StanleyPlanner:
         self.conf = conf                    # Current configuration for the gym based on the maps
         self.load_waypoints(conf)           # Waypoints of the raceline
         self.ind_old = 0                    # Current Waypoint index
+        self.max_reacquire = 20.
 
     def load_waypoints(self, conf):
         # Loading the x and y waypoints in the "..._raceline.csv" which includes the path to follow
@@ -216,44 +217,19 @@ class StanleyPlanner:
 
         ############# Calculate closest point to the front axle based on minimum distance calculation ################
 
-        # Extract the raceline specific waypoints x,y, heading, velocity
-        wpts_x = self.waypoints[:, [1]]
-        wpts_y = self.waypoints[:, [2]]
-        wpts_yaw = self.waypoints[:, [3]]
-        wpts_veloctiy = self.waypoints[:, [5]]
-        wpts_x2 = wpts_x.tolist()
-        wpts_y2 = wpts_y.tolist()
-        wpts_yaw2 = wpts_yaw.tolist()
-
         # Calculate Position of the front axle
         fx = vehicle_state[0] + self.wheelbase * math.cos(vehicle_state[2])
         fy = vehicle_state[1] + self.wheelbase * math.sin(vehicle_state[2])
         position_front_axle = np.array([fx, fy])
-        position_rear_axle = np.array([vehicle_state[0], vehicle_state[1]])
-
-        # Calculate the Distances from the front axle to all the waypoints
-        dx = [fx - x for x in wpts_x2]
-        dy = [fy - y for y in wpts_y2]
 
         # Find target index for the correct waypoint by finding the index with the lowest distance value/hypothenuses
-        target_index = int(np.argmin(np.hypot(dx, dy)))
-        target_index = max(self.ind_old, target_index)
-        self.ind_old = max(self.ind_old, target_index)
-
-        distances = np.hypot(dx, dy)
-        distances2 = np.min(distances)
-        distances3 = np.argmin(distances)
-        closest_point = np.array([wpts_x[target_index][0], wpts_y[target_index][0]])
-
-
-        ############################# Speed up calculation ###################################################
         wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
-        nearest_point_front, nearest_dist, t, i = nearest_point_on_trajectory(position_front_axle, wpts)
+        nearest_point_front, nearest_dist, t, target_index = nearest_point_on_trajectory(position_front_axle, wpts)
+
+        # Calculate the Distances from the front axle to all the waypoints
         distance_nearest_point_x= fx - nearest_point_front[0]
         distance_nearest_point_y = fy - nearest_point_front[1]
         vec_dist_nearest_point = np.array([distance_nearest_point_x, distance_nearest_point_y])
-
-
 
         ###################  Calculate the current Cross-Track Error ef in [m]   ################
 
@@ -261,31 +237,22 @@ class StanleyPlanner:
         front_axle_vec_rot_90 = np.array([[math.cos(vehicle_state[2] - math.pi / 2.0)],
                                           [math.sin(vehicle_state[2] - math.pi / 2.0)]])
 
-        vec_target_2_front = np.array([dx[target_index], dy[target_index]])
+        #vec_target_2_front = np.array([dx[target_index], dy[target_index]])
 
         # Caculate the cross-track error ef by
-        ef = np.dot(vec_target_2_front.T, front_axle_vec_rot_90)
+        #ef = np.dot(vec_target_2_front.T, front_axle_vec_rot_90)
         ef2 = np.dot(vec_dist_nearest_point.T, front_axle_vec_rot_90)
-
-
-        #######################################################################################
-        ################## DEBUG - Plotting the points" #############################
-
-
-        ################## DEBUG - Plotting the points" #############################
-        #######################################################################################
-
 
         #############  Calculate the heading error theta_e  normalized to an angle to [-pi, pi]     ##########
 
         # Extract heading on the raceline - different COSY in raceline path so add of pi/2 = 90 degrees
-        theta_raceline = wpts_yaw2[target_index][0] + math.pi/2
+        theta_raceline = waypoints[target_index][3] + math.pi/2
 
         # Calculate the heading error by taking the difference between current and goal + Normalize the angles
         theta_e = pi_2_pi(theta_raceline - vehicle_state[2])
 
         # Calculate the target Veloctiy for the desired state
-        goal_veloctiy = wpts_veloctiy[target_index][0]
+        goal_veloctiy = waypoints[target_index][5]
 
         return theta_e, ef2, target_index, goal_veloctiy
 
