@@ -228,23 +228,32 @@ class StanleyPlanner:
         # Calculate Position of the front axle
         fx = vehicle_state[0] + self.wheelbase * math.cos(vehicle_state[2])
         fy = vehicle_state[1] + self.wheelbase * math.sin(vehicle_state[2])
-
-        plt.cla()
-        plt.plot(wpts_x, wpts_y, color='gray', linewidth=2.0)  # Plot Raceline
+        position_front_axle = np.array([fx, fy])
+        position_rear_axle = np.array([vehicle_state[0], vehicle_state[1]])
 
         # Calculate the Distances from the front axle to all the waypoints
         dx = [fx - x for x in wpts_x2]
         dy = [fy - y for y in wpts_y2]
 
-        # Find the target index for the correct waypoint by finding the index with the lowest value
+        # Find target index for the correct waypoint by finding the index with the lowest distance value/hypothenuses
         target_index = int(np.argmin(np.hypot(dx, dy)))
         target_index = max(self.ind_old, target_index)
         self.ind_old = max(self.ind_old, target_index)
 
+        distances = np.hypot(dx, dy)
+        distances2 = np.min(distances)
+        distances3 = np.argmin(distances)
+        closest_point = np.array([wpts_x[target_index][0], wpts_y[target_index][0]])
+
+
         ############################# Speed up calculation ###################################################
         wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
-        position_front_axle = np.array([fx, fy])
         nearest_point_front, nearest_dist, t, i = nearest_point_on_trajectory(position_front_axle, wpts)
+        distance_nearest_point_x= fx - nearest_point_front[0]
+        distance_nearest_point_y = fy - nearest_point_front[1]
+        vec_dist_nearest_point = np.array([distance_nearest_point_x, distance_nearest_point_y])
+
+
 
         ###################  Calculate the current Cross-Track Error ef in [m]   ################
 
@@ -256,15 +265,13 @@ class StanleyPlanner:
 
         # Caculate the cross-track error ef by
         ef = np.dot(vec_target_2_front.T, front_axle_vec_rot_90)
-        ef2 = np.dot(nearest_point_front.T, front_axle_vec_rot_90)
+        ef2 = np.dot(vec_dist_nearest_point.T, front_axle_vec_rot_90)
+
 
         #######################################################################################
         ################## DEBUG - Plotting the points" #############################
 
 
-        plt.plot(dx[target_index][0], dy[target_index][0], '.r')    #Plot Current vehicle position - rear axle
-        plt.plot(position_front_axle[0],position_front_axle[1], '.b')   #Plot Current vehicle position - front axle
-        plt.plot(nearest_point_front[0],nearest_point_front[1], '.c')   # Plot Nearest Point to rear axel -BILLY calculation
         ################## DEBUG - Plotting the points" #############################
         #######################################################################################
 
@@ -280,7 +287,7 @@ class StanleyPlanner:
         # Calculate the target Veloctiy for the desired state
         goal_veloctiy = wpts_veloctiy[target_index][0]
 
-        return theta_e, ef, target_index, goal_veloctiy
+        return theta_e, ef2, target_index, goal_veloctiy
 
     def controller(self, vehicle_state, waypoints, vgain):
         " Front Wheel Feedback Controller to track the path "
