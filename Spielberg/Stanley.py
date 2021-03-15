@@ -4,7 +4,6 @@ import gym
 import numpy as np
 from argparse import Namespace
 import math
-
 from numba import njit
 
 """ 
@@ -66,22 +65,24 @@ class StanleyPlanner:
         self.wheelbase = wb                 # Wheelbase of the vehicle
         self.conf = conf                    # Current configuration for the gym based on the maps
         self.load_waypoints(conf)           # Waypoints of the raceline
-        self.ind_old = 0                    # Current Waypoint index
         self.max_reacquire = 20.
 
     def load_waypoints(self, conf):
-        # Loading the x and y waypoints in the "..._raceline.csv" which includes the path to follow
+        """
+        Loading the x and y waypoints in the "..._raceline.csv" which includes the path to follow
+        """
+
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
     def calc_theta_and_ef(self, vehicle_state, waypoints):
-        " calc theta and ef"
-        " Theta is the heading of the car, this heading must be minimized"
-        " ef = crosstrack error/The distance from the optimal path"
-        " ef = lateral distance in frenet frame (front wheel)"
+        """
+        calc theta and ef
+        Theta is the heading of the car, this heading must be minimized
+        ef = crosstrack error/The distance from the optimal path/ lateral distance in frenet frame (front wheel)
+        """
 
         ############# Calculate closest point to the front axle based on minimum distance calculation ################
-
-        # Calculate Position of the front axle
+        # Calculate Position of the front axle of the vehicle based on current position
         fx = vehicle_state[0] + self.wheelbase * math.cos(vehicle_state[2])
         fy = vehicle_state[1] + self.wheelbase * math.sin(vehicle_state[2])
         position_front_axle = np.array([fx, fy])
@@ -96,7 +97,6 @@ class StanleyPlanner:
         vec_dist_nearest_point = np.array([distance_nearest_point_x, distance_nearest_point_y])
 
         ###################  Calculate the current Cross-Track Error ef in [m]   ################
-
         # Project crosstrack error onto front axle vector
         front_axle_vec_rot_90 = np.array([[math.cos(vehicle_state[2] - math.pi / 2.0)],
                                           [math.sin(vehicle_state[2] - math.pi / 2.0)]])
@@ -104,10 +104,9 @@ class StanleyPlanner:
         #vec_target_2_front = np.array([dx[target_index], dy[target_index]])
 
         # Caculate the cross-track error ef by
-        ef2 = np.dot(vec_dist_nearest_point.T, front_axle_vec_rot_90)
+        ef = np.dot(vec_dist_nearest_point.T, front_axle_vec_rot_90)
 
         #############  Calculate the heading error theta_e  normalized to an angle to [-pi, pi]     ##########
-
         # Extract heading on the raceline - different COSY in raceline path so add of pi/2 = 90 degrees
         theta_raceline = waypoints[target_index][3] + math.pi/2
 
@@ -117,21 +116,21 @@ class StanleyPlanner:
         # Calculate the target Veloctiy for the desired state
         goal_veloctiy = waypoints[target_index][5]
 
-        return theta_e, ef2, target_index, goal_veloctiy
+        return theta_e, ef, target_index, goal_veloctiy
 
     def controller(self, vehicle_state, waypoints, vgain):
         " Front Wheel Feedback Controller to track the path "
         " Based on the heading error theta_e and the crosstrack error ef we calculate the steering angle"
         " Returns the optimal steering angle delta is P-Controller with the proportional gain k"
 
-        k_path =5.2                 # Proportional gain for path control
+        k_path = 5.2                 # Proportional gain for path control
         k_veloctiy = vgain           # Proportional gain for speed control, defined globally in the gym
         theta_e, ef, target_index, goal_veloctiy = self.calc_theta_and_ef(vehicle_state, waypoints)
 
         # Caculate steering angle based on the cross track error to the front axle in [rad]
         cte_front = math.atan2(k_path * ef, vehicle_state[3])
 
-        # Calculate final steering angle/ control input "delta" in [rad]: Crosstrack error ef + heading error
+        # Calculate final steering angle/ control input in [rad]: Steering Angle based on error + heading error
         delta = cte_front + theta_e
 
         # Calculate final speed control input in [m/s]:
@@ -141,7 +140,7 @@ class StanleyPlanner:
         return delta, speed
 
     def plan(self, pose_x, pose_y, pose_theta, velocity, vgain):
-        #Define a numpy array that includes the current vehicle state: Pose + Veloctiy
+        #Define a numpy array that includes the current vehicle state: x,y, theta, veloctiy
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
         #Calculate the steering angle and the speed in the controller
@@ -152,7 +151,7 @@ class StanleyPlanner:
 
 if __name__ == '__main__':
 
-    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.75}
+    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.65}
     with open('config_Spielberg_map.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
