@@ -199,17 +199,16 @@ class StanleyPlanner:
     Front-Wheel Feedback Controller (Stanley)
     """
     def __init__(self, conf, wb):
-        self.wheelbase = wb
-        self.conf = conf
-        self.load_waypoints(conf)
-        self.max_reacquire = 20.
-        self.ind_old = 0
+        self.wheelbase = wb                 # Wheelbase of the vehicle
+        self.conf = conf                    # Current configuration for the gym based on the maps
+        self.load_waypoints(conf)           # Waypoints of the raceline
+        self.ind_old = 0                    # Current Waypoint index
 
     def load_waypoints(self, conf):
-        # load waypoints
+        # Loading the x and y waypoints in the "..._raceline.csv" which includes the path to follow
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
-    def calc_theta_and_ef(self, vehicle_state , waypoints):
+    def calc_theta_and_ef(self, vehicle_state, waypoints):
         " calc theta and ef"
         " Theta is the heading of the car, this heading must be minimized"
         " ef = crosstrack error/The distance from the optimal path"
@@ -219,7 +218,7 @@ class StanleyPlanner:
         fx = vehicle_state[0] + self.wheelbase * math.cos(vehicle_state[2])
         fy = vehicle_state[1] + self.wheelbase * math.sin(vehicle_state[2])
         #position_front_axle = np.array([fx, fy])
-        #nearest_point_front, nearest_dist, t, i = nearest_point_on_trajectory(position_front_axle, wpts)
+        #nearest_point_front, nearest_dist, t, i = nearest_point_on_trajectory(position_front_axle, waypoints)
 
         #### Calculate closest point to the front axle
         # Extract the individual waypoints
@@ -264,13 +263,13 @@ class StanleyPlanner:
 
         return theta_e, ef, target_index, goal_veloctiy
 
-    def controller(self, vehicle_state, waypoints):
+    def controller(self, vehicle_state, waypoints, vgain):
         " Front Wheel Feedback Controller to track the path "
         " Based on the heading error theta_e and the crosstrack error ef we calculate the steering angle"
         " Returns the optimal steering angle delta is P-Controller with the proportional gain k"
 
         k_path =5.2                 # Proportional gain for path control
-        k_veloctiy = 0.75           # Proportional gain for speed control
+        k_veloctiy = vgain           # Proportional gain for speed control, defined globally in the gym
         theta_e, ef, target_index, goal_veloctiy = self.calc_theta_and_ef(vehicle_state, waypoints)
 
         # Caculate steering angle based on the cross track error to the front axle in [rad]
@@ -288,14 +287,14 @@ class StanleyPlanner:
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
         #Calculate the steering angle and the speed in the controller
-        steering_angle, speed = self.controller(vehicle_state, self.waypoints)
+        steering_angle, speed = self.controller(vehicle_state, self.waypoints, vgain)
 
         return speed,steering_angle
 
 
 if __name__ == '__main__':
 
-    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.90338203837889}
+    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.75}
     with open('config_Melbourne.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
@@ -303,6 +302,8 @@ if __name__ == '__main__':
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
     env.render()
+
+    # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = StanleyPlanner(conf, 0.17145 + 0.15875)
 
     laptime = 0.0
