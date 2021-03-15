@@ -214,21 +214,23 @@ class StanleyPlanner:
         " ef = crosstrack error/The distance from the optimal path"
         " ef = lateral distance in frenet frame (front wheel)"
 
-        # Calculate Position of the front axle and closest point to it
-        fx = vehicle_state[0] + self.wheelbase * math.cos(vehicle_state[2])
-        fy = vehicle_state[1] + self.wheelbase * math.sin(vehicle_state[2])
-        #position_front_axle = np.array([fx, fy])
-        #nearest_point_front, nearest_dist, t, i = nearest_point_on_trajectory(position_front_axle, waypoints)
+        ############# Calculate closest point to the front axle based on minimum distance calculation ################
 
-        #### Calculate closest point to the front axle
-        # Extract the individual waypoints
-        wpts_x = self.waypoints[:,[1]]
-        wpts_y = self.waypoints[:,[2]]
-        wpts_yaw = self.waypoints[:,[3]]
+        # Extract the raceline specific waypoints x,y, heading, velocity
+        wpts_x = self.waypoints[:, [1]]
+        wpts_y = self.waypoints[:, [2]]
+        wpts_yaw = self.waypoints[:, [3]]
         wpts_veloctiy = self.waypoints[:, [5]]
         wpts_x2 = wpts_x.tolist()
         wpts_y2 = wpts_y.tolist()
         wpts_yaw2 = wpts_yaw.tolist()
+
+        # Calculate Position of the front axle
+        fx = vehicle_state[0] + self.wheelbase * math.cos(vehicle_state[2])
+        fy = vehicle_state[1] + self.wheelbase * math.sin(vehicle_state[2])
+
+        plt.cla()
+        plt.plot(wpts_x, wpts_y, color='gray', linewidth=2.0)  # Plot Raceline
 
         # Calculate the Distances from the front axle to all the waypoints
         dx = [fx - x for x in wpts_x2]
@@ -239,7 +241,12 @@ class StanleyPlanner:
         target_index = max(self.ind_old, target_index)
         self.ind_old = max(self.ind_old, target_index)
 
-        ###################     Calculate the current Cross-Track Error ef in [m]
+        ############################# Speed up calculation ###################################################
+        wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
+        position_front_axle = np.array([fx, fy])
+        nearest_point_front, nearest_dist, t, i = nearest_point_on_trajectory(position_front_axle, wpts)
+
+        ###################  Calculate the current Cross-Track Error ef in [m]   ################
 
         # Project crosstrack error onto front axle vector
         front_axle_vec_rot_90 = np.array([[math.cos(vehicle_state[2] - math.pi / 2.0)],
@@ -249,12 +256,24 @@ class StanleyPlanner:
 
         # Caculate the cross-track error ef by
         ef = np.dot(vec_target_2_front.T, front_axle_vec_rot_90)
+        ef2 = np.dot(nearest_point_front.T, front_axle_vec_rot_90)
+
+        #######################################################################################
+        ################## DEBUG - Plotting the points" #############################
 
 
-        ###################     Calculate the heading error theta_e  normalized to an angle to [-pi, pi]
+        plt.plot(dx[target_index][0], dy[target_index][0], '.r')    #Plot Current vehicle position - rear axle
+        plt.plot(position_front_axle[0],position_front_axle[1], '.b')   #Plot Current vehicle position - front axle
+        plt.plot(nearest_point_front[0],nearest_point_front[1], '.c')   # Plot Nearest Point to rear axel -BILLY calculation
+        ################## DEBUG - Plotting the points" #############################
+        #######################################################################################
+
+
+        #############  Calculate the heading error theta_e  normalized to an angle to [-pi, pi]     ##########
 
         # Extract heading on the raceline - different COSY in raceline path so add of pi/2 = 90 degrees
         theta_raceline = wpts_yaw2[target_index][0] + math.pi/2
+
         # Calculate the heading error by taking the difference between current and goal + Normalize the angles
         theta_e = pi_2_pi(theta_raceline - vehicle_state[2])
 
@@ -274,8 +293,10 @@ class StanleyPlanner:
 
         # Caculate steering angle based on the cross track error to the front axle in [rad]
         cte_front = math.atan2(k_path * ef, vehicle_state[3])
+
         # Calculate final steering angle/ control input "delta" in [rad]: Crosstrack error ef + heading error
         delta = cte_front + theta_e
+
         # Calculate final speed control input in [m/s]:
         #speed_diff = k_veloctiy * (goal_veloctiy-velocity)
         speed = k_veloctiy * goal_veloctiy
@@ -295,7 +316,7 @@ class StanleyPlanner:
 if __name__ == '__main__':
 
     work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.75}
-    with open('config_Melbourne.yaml') as file:
+    with open('config_Spielberg_map.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
 
