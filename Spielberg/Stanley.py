@@ -294,32 +294,24 @@ class StanleyPlanner:
 if __name__ == '__main__':
 
     work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.90338203837889}
-    with open('config_example_map.yaml') as file:
+    with open('config_Melborune.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
 
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
-    #obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta],[conf.sx2, conf.sy2, conf.stheta2],[conf.sx3, conf.sy3, conf.stheta3]]))
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
     env.render()
     planner = StanleyPlanner(conf, 0.17145 + 0.15875)
-    #planner = PurePursuitPlanner(conf, 0.17145+0.15875)
-    #planner2 = PurePursuitPlanner(conf, 0.17145+0.15875)
-    #planner3 = PurePursuitPlanner(conf, 0.17145+0.15875)
-
 
     laptime = 0.0
     start = time.time()
 
     while not done:
         speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], work['tlad'], obs['linear_vels_x'][0], work['vgain'])
-        #speed2, steer2 = planner2.plan(obs['poses_x'][1], obs['poses_y'][1], obs['poses_theta'][1], work['tlad'], work['vgain'])
-        #speed3, steer3 = planner3.plan(obs['poses_x'][2], obs['poses_y'][2], obs['poses_theta'][2], work['tlad'],work['vgain'])
 
-
-        #obs, step_reward, done, info = env.step(np.array([[steer, speed],[steer2, speed2],[steer3, speed3]]))
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
         env.render(mode='human_fast')
+        
     print("Racetrack")
     print('Sim elapsed time:', laptime, 'Real elapsed time:', time.time()-start)
