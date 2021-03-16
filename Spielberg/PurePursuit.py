@@ -208,8 +208,6 @@ if __name__ == '__main__':
     env.render()
     planner = PurePursuitPlanner(conf, 0.17145+0.15875)
 
-
-
     laptime = 0.0
     start = time.time()
 

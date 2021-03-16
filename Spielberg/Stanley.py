@@ -5,6 +5,7 @@ import numpy as np
 from argparse import Namespace
 import math
 from numba import njit
+import matplotlib.pyplot as plt
 
 """ 
 Planner Helpers
@@ -66,6 +67,10 @@ class StanleyPlanner:
         self.conf = conf                    # Current configuration for the gym based on the maps
         self.load_waypoints(conf)           # Waypoints of the raceline
         self.max_reacquire = 20.
+        self.stopthecount = 0
+        self.heading = []
+        self.heading_raceline = []
+        self.heading_error = []
 
     def load_waypoints(self, conf):
         """
@@ -74,7 +79,7 @@ class StanleyPlanner:
 
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
-    def calc_theta_and_ef(self, vehicle_state, waypoints):
+    def calc_theta_and_ef(self, vehicle_state, waypoints,lap):
         """
         calc theta and ef
         Theta is the heading of the car, this heading must be minimized
@@ -116,16 +121,40 @@ class StanleyPlanner:
         # Calculate the target Veloctiy for the desired state
         goal_veloctiy = waypoints[target_index][5]
 
+
+
+        self.heading.append(vehicle_state[2])
+        self.heading_raceline.append(theta_raceline)
+        self.heading_error.append(theta_raceline - vehicle_state[2])
+        self.stopthecount = self.stopthecount + 1
+
+        if self.waypoints[target_index][0] > 175 and self.waypoints[target_index][0] < 180 and lap ==1:
+        #if lap == 1:
+
+            # plt.figure(1)
+            # plt.plot(wpts[:,[0]], wpts[:,[1]], color='gray', linewidth=2.0)  # Plot Raceline
+            # plt.plot(vehicle_state[0], vehicle_state[1], '.r')    #Plot Current vehicle position - rear axle
+            # plt.plot(position_front_axle[0],position_front_axle[1], '.b')   #Plot Current vehicle position - front axle
+            # plt.plot(nearest_point_front[0],nearest_point_front[1], '.c')   # Plot Nearest Point to rear axel -BILLY calculation
+            ################## DEBUG - Plotting the points" #############################
+            #cte_front = math.atan2(5.2 * ef, vehicle_state[3])
+            #delta = cte_front + theta_e
+            plt.figure(2)
+            plt.plot(self.heading_raceline, '.-r')
+            plt.plot(self.heading , '.-m')
+            plt.plot(self.heading_error, '.-b')
+            plt.axvline(x=6770, color='k')
+
         return theta_e, ef, target_index, goal_veloctiy
 
-    def controller(self, vehicle_state, waypoints, vgain):
+    def controller(self, vehicle_state, waypoints, vgain,lap):
         " Front Wheel Feedback Controller to track the path "
         " Based on the heading error theta_e and the crosstrack error ef we calculate the steering angle"
         " Returns the optimal steering angle delta is P-Controller with the proportional gain k"
 
         k_path = 5.2                 # Proportional gain for path control
         k_veloctiy = vgain           # Proportional gain for speed control, defined globally in the gym
-        theta_e, ef, target_index, goal_veloctiy = self.calc_theta_and_ef(vehicle_state, waypoints)
+        theta_e, ef, target_index, goal_veloctiy = self.calc_theta_and_ef(vehicle_state, waypoints, lap)
 
         # Caculate steering angle based on the cross track error to the front axle in [rad]
         cte_front = math.atan2(k_path * ef, vehicle_state[3])
@@ -139,12 +168,13 @@ class StanleyPlanner:
 
         return delta, speed
 
-    def plan(self, pose_x, pose_y, pose_theta, velocity, vgain):
+    def plan(self, pose_x, pose_y, pose_theta, velocity, vgain, lap):
         #Define a numpy array that includes the current vehicle state: x,y, theta, veloctiy
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
         #Calculate the steering angle and the speed in the controller
-        steering_angle, speed = self.controller(vehicle_state, self.waypoints, vgain)
+        steering_angle, speed = self.controller(vehicle_state, self.waypoints, vgain,lap)
+
 
         return speed,steering_angle
 
@@ -167,7 +197,7 @@ if __name__ == '__main__':
     start = time.time()
 
     while not done:
-        speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], work['vgain'])
+        speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], work['vgain'], obs['lap_counts'])
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
