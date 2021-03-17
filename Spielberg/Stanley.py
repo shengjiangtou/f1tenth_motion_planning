@@ -6,6 +6,7 @@ from argparse import Namespace
 import math
 from numba import njit
 import matplotlib.pyplot as plt
+import pickle
 
 """ 
 Planner Helpers
@@ -125,9 +126,11 @@ class StanleyPlanner:
         return theta_e, ef, target_index, goal_veloctiy
 
     def controller(self, vehicle_state, waypoints, vgain,lap):
-        " Front Wheel Feedback Controller to track the path "
-        " Based on the heading error theta_e and the crosstrack error ef we calculate the steering angle"
-        " Returns the optimal steering angle delta is P-Controller with the proportional gain k"
+        """
+        Front Wheel Feedback Controller to track the path
+        Based on the heading error theta_e and the crosstrack error ef we calculate the steering angle
+        Returns the optimal steering angle delta is P-Controller with the proportional gain k
+        """
 
         k_path = 5.2                 # Proportional gain for path control
         k_veloctiy = vgain           # Proportional gain for speed control, defined globally in the gym
@@ -154,17 +157,36 @@ class StanleyPlanner:
 
         return speed,steering_angle
 
-class Logging:
+class Datalogger:
     """
     This is the class for logging vehicle data in the F1TENTH Gym
     """
-    def __init__(self, conf, wb):
+    def load_waypoints(self, conf):
+        """
+        Loading the x and y waypoints in the "..._raceline.csv" which includes the path to follow
+        """
+        self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
+
+    def __init__(self, conf):
         self.conf = conf                            # Current configuration for the gym based on the maps
         self.load_waypoints(conf)                   # Waypoints of the raceline
         self.vehicle_position_x = []                # Current vehicle position X (rear axle) on the map
         self.vehicle_position_y = []                # Current vehicle position Y (rear axle) on the map
         self.vehicle_position_heading = []          # Current vehicle heading on the map
         self.vehicle_velocity = []                  # Current vehicle velocity
+        self.control_velocity = []                  # Desired vehicle velocity based on control calculation
+        self.steering_angle = []                    # Steering angle based on control calculation
+        self.lapcounter = []                        # Current vehicle velocity
+
+    def logging(self, pose_x, pose_y, pose_theta, current_velocity, lap, control_veloctiy, control_steering):
+        self.vehicle_position_x.append(pose_x)
+        self.vehicle_position_y.append(pose_y)
+        self.vehicle_position_heading.append(pose_theta)
+        self.vehicle_velocity.append(current_velocity)
+        self.control_velocity.append(control_veloctiy)
+        self.steering_angle.append(control_steering)
+        self.lapcounter.append(lap)
+
 
 if __name__ == '__main__':
 
@@ -179,6 +201,7 @@ if __name__ == '__main__':
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = StanleyPlanner(conf, 0.17145 + 0.15875)
+    logging = Datalogger(conf)
 
     laptime = 0.0
     start = time.time()
@@ -191,7 +214,7 @@ if __name__ == '__main__':
         env.render(mode='human_fast')
 
         if conf_dict['logging'] == 'True':
-            test = 0
+            logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
 
-    print("Racetrack")
+    pickle.dump(logging, open("datalogging.p", "wb"))
     print('Sim elapsed time:', laptime, 'Real elapsed time:', time.time()-start)
