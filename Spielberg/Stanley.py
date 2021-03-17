@@ -121,30 +121,6 @@ class StanleyPlanner:
         # Calculate the target Veloctiy for the desired state
         goal_veloctiy = waypoints[target_index][5]
 
-
-
-        self.heading.append(vehicle_state[2])
-        self.heading_raceline.append(theta_raceline)
-        self.heading_error.append(theta_raceline - vehicle_state[2])
-        self.stopthecount = self.stopthecount + 1
-
-        if self.waypoints[target_index][0] > 175 and self.waypoints[target_index][0] < 180 and lap ==1:
-        #if lap == 1:
-
-            # plt.figure(1)
-            # plt.plot(wpts[:,[0]], wpts[:,[1]], color='gray', linewidth=2.0)  # Plot Raceline
-            # plt.plot(vehicle_state[0], vehicle_state[1], '.r')    #Plot Current vehicle position - rear axle
-            # plt.plot(position_front_axle[0],position_front_axle[1], '.b')   #Plot Current vehicle position - front axle
-            # plt.plot(nearest_point_front[0],nearest_point_front[1], '.c')   # Plot Nearest Point to rear axel -BILLY calculation
-            ################## DEBUG - Plotting the points" #############################
-            #cte_front = math.atan2(5.2 * ef, vehicle_state[3])
-            #delta = cte_front + theta_e
-            plt.figure(2)
-            plt.plot(self.heading_raceline, '.-r')
-            plt.plot(self.heading , '.-m')
-            plt.plot(self.heading_error, '.-b')
-            plt.axvline(x=6770, color='k')
-
         return theta_e, ef, target_index, goal_veloctiy
 
     def controller(self, vehicle_state, waypoints, vgain,lap):
@@ -175,13 +151,12 @@ class StanleyPlanner:
         #Calculate the steering angle and the speed in the controller
         steering_angle, speed = self.controller(vehicle_state, self.waypoints, vgain,lap)
 
-
         return speed,steering_angle
 
 
 if __name__ == '__main__':
 
-    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.55}
+    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.70}
     with open('config_Spielberg_map.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
