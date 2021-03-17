@@ -179,5 +179,8 @@ if __name__ == '__main__':
         laptime += step_reward
         env.render(mode='human_fast')
 
+        if conf_dict['logging'] == 'True':
+            test = 0
+
     print("Racetrack")
     print('Sim elapsed time:', laptime, 'Real elapsed time:', time.time()-start)
