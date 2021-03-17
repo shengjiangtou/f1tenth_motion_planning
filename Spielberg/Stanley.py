@@ -132,7 +132,7 @@ class StanleyPlanner:
         Returns the optimal steering angle delta is P-Controller with the proportional gain k
         """
 
-        k_path = 5.2                 # Proportional gain for path control
+        k_path = 8.2                 # Proportional gain for path control
         k_veloctiy = vgain           # Proportional gain for speed control, defined globally in the gym
         theta_e, ef, target_index, goal_veloctiy = self.calc_theta_and_ef(vehicle_state, waypoints, lap)
 
@@ -190,7 +190,7 @@ class Datalogger:
 
 if __name__ == '__main__':
 
-    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.70}
+    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.85}
     with open('config_Spielberg_map.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
@@ -216,5 +216,6 @@ if __name__ == '__main__':
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
 
-    pickle.dump(logging, open("datalogging.p", "wb"))
+    if conf_dict['logging'] == 'True':
+        pickle.dump(logging, open("datalogging.p", "wb"))
     print('Sim elapsed time:', laptime, 'Real elapsed time:', time.time()-start)
