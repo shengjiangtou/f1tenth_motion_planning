@@ -112,8 +112,9 @@ class StanleyPlanner:
         ef = np.dot(vec_dist_nearest_point.T, front_axle_vec_rot_90)
 
         #############  Calculate the heading error theta_e  normalized to an angle to [-pi, pi]     ##########
-        # Extract heading on the raceline - different COSY in raceline path so add of pi/2 = 90 degrees
-        theta_raceline = waypoints[target_index][3] + math.pi/2
+        # Extract heading on the raceline
+        # BE CAREFUL: If your raceline is based on a different coordinate system you need to -+ pi/2 = 90 degrees
+        theta_raceline = waypoints[target_index][3]
 
         # Calculate the heading error by taking the difference between current and goal + Normalize the angles
         theta_e = pi_2_pi(theta_raceline - vehicle_state[2])

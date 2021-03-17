@@ -4,25 +4,25 @@ run_name: 'map_wide'
 perf_num: 6
 
 # map paths
-map_path: './Spielberg_map'
+map_path: './Melbourne_map'
 map_ext: '.png'
 
 # starting pose for map
-sx: -0.0440806
-sy: -0.8491629
-stheta: 3.4
+sx: -0.4338847
+sy: -0.6118584
+stheta: 2.3756662
 
-sx2: 1.3079426
-sy2: -0.4869018
-stheta2: 3.4
+sx2: 0.7305930
+sy2: -0.5436054
+stheta2: 2.2
 
-sx3: 2.6599770
-sy3: -0.1246830
-stheta3: 3.4
+sx3: 1.4387733
+sy3: -2.4143688
+stheta3: 2.2
 
 
 # raceline path and indices
-wpt_path: './Spielberg_raceline_newconv.csv'
+wpt_path: './Melbourne_raceline.csv'
 wpt_delim: ';'
 wpt_rowskip: 3
 wpt_xind: 1

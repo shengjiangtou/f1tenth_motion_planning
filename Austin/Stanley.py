@@ -114,7 +114,7 @@ class StanleyPlanner:
         #############  Calculate the heading error theta_e  normalized to an angle to [-pi, pi]     ##########
         # Extract heading on the raceline
         # BE CAREFUL: If your raceline is based on a different coordinate system you need to -+ pi/2 = 90 degrees
-        theta_raceline = waypoints[target_index][3]
+        theta_raceline = waypoints[target_index][3] + math.pi/2
 
         # Calculate the heading error by taking the difference between current and goal + Normalize the angles
         theta_e = pi_2_pi(theta_raceline - vehicle_state[2])
@@ -158,7 +158,7 @@ class StanleyPlanner:
 if __name__ == '__main__':
 
     work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.70}
-    with open('config_Melbourne.yaml') as file:
+    with open('config_Austin_map.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
 
@@ -177,7 +177,7 @@ if __name__ == '__main__':
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        env.render(mode='human_fast')
+        env.render(mode='human')
 
     print("Racetrack")
     print('Sim elapsed time:', laptime, 'Real elapsed time:', time.time()-start)

@@ -4,13 +4,13 @@ run_name: 'map_wide'
 perf_num: 6
 
 # map paths
-map_path: './Spielberg_map'
+map_path: './SaoPaulo_map'
 map_ext: '.png'
 
 # starting pose for map
-sx: -0.0440806
-sy: -0.8491629
-stheta: 3.4
+sx: -0.8157367
+sy: -0.1041683
+stheta: 4.9585821
 
 sx2: 1.3079426
 sy2: -0.4869018
@@ -22,7 +22,7 @@ stheta3: 3.4
 
 
 # raceline path and indices
-wpt_path: './Spielberg_raceline_newconv.csv'
+wpt_path: './SaoPaulo_raceline.csv'
 wpt_delim: ';'
 wpt_rowskip: 3
 wpt_xind: 1

@@ -158,7 +158,7 @@ class StanleyPlanner:
 if __name__ == '__main__':
 
     work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.70}
-    with open('config_Melbourne.yaml') as file:
+    with open('config_MoscowRaceway.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
 
