@@ -154,6 +154,17 @@ class StanleyPlanner:
 
         return speed,steering_angle
 
+class Logging:
+    """
+    This is the class for logging vehicle data in the F1TENTH Gym
+    """
+    def __init__(self, conf, wb):
+        self.conf = conf                            # Current configuration for the gym based on the maps
+        self.load_waypoints(conf)                   # Waypoints of the raceline
+        self.vehicle_position_x = []                # Current vehicle position X (rear axle) on the map
+        self.vehicle_position_y = []                # Current vehicle position Y (rear axle) on the map
+        self.vehicle_position_heading = []          # Current vehicle heading on the map
+        self.vehicle_velocity = []                  # Current vehicle velocity
 
 if __name__ == '__main__':
 

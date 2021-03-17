@@ -129,5 +129,5 @@ dmypy.json
 .pyre/
 
 # MacOS and Pycharm Stuff
-.idead
+.idea
 .DS_Store
