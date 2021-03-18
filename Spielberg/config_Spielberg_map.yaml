@@ -1,5 +1,6 @@
 # metadata
 run_name: 'map_wide'
+logging: 'True'
 # characteristic number for map
 perf_num: 6
 
@@ -22,7 +23,7 @@ stheta3: 3.4
 
 
 # raceline path and indices
-wpt_path: './Spielberg_raceline_newconv.csv'
+wpt_path: './Spielberg_raceline.csv'
 wpt_delim: ';'
 wpt_rowskip: 3
 wpt_xind: 1
