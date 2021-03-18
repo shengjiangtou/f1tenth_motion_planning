@@ -68,10 +68,6 @@ class StanleyPlanner:
         self.conf = conf                    # Current configuration for the gym based on the maps
         self.load_waypoints(conf)           # Waypoints of the raceline
         self.max_reacquire = 20.
-        self.stopthecount = 0
-        self.heading = []
-        self.heading_raceline = []
-        self.heading_error = []
 
     def load_waypoints(self, conf):
         """
@@ -80,7 +76,7 @@ class StanleyPlanner:
 
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
-    def calc_theta_and_ef(self, vehicle_state, waypoints,lap):
+    def calc_theta_and_ef(self, vehicle_state, waypoints):
         """
         calc theta and ef
         Theta is the heading of the car, this heading must be minimized
@@ -113,7 +109,7 @@ class StanleyPlanner:
         ef = np.dot(vec_dist_nearest_point.T, front_axle_vec_rot_90)
 
         #############  Calculate the heading error theta_e  normalized to an angle to [-pi, pi]     ##########
-        # Extract heading on the raceline
+        # Extract heading for the optimal raceline
         # BE CAREFUL: If your raceline is based on a different coordinate system you need to -+ pi/2 = 90 degrees
         theta_raceline = waypoints[target_index][3]
 
@@ -125,7 +121,7 @@ class StanleyPlanner:
 
         return theta_e, ef, target_index, goal_veloctiy
 
-    def controller(self, vehicle_state, waypoints, vgain,lap):
+    def controller(self, vehicle_state, waypoints, vgain):
         """
         Front Wheel Feedback Controller to track the path
         Based on the heading error theta_e and the crosstrack error ef we calculate the steering angle
@@ -134,7 +130,7 @@ class StanleyPlanner:
 
         k_path = 8.2                 # Proportional gain for path control
         k_veloctiy = vgain           # Proportional gain for speed control, defined globally in the gym
-        theta_e, ef, target_index, goal_veloctiy = self.calc_theta_and_ef(vehicle_state, waypoints, lap)
+        theta_e, ef, target_index, goal_veloctiy = self.calc_theta_and_ef(vehicle_state, waypoints)
 
         # Caculate steering angle based on the cross track error to the front axle in [rad]
         cte_front = math.atan2(k_path * ef, vehicle_state[3])
@@ -207,7 +203,7 @@ if __name__ == '__main__':
     start = time.time()
 
     while not done:
-        speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], work['vgain'], obs['lap_counts'])
+        speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], work['vgain'])
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
