@@ -1,5 +1,6 @@
 # metadata
 run_name: 'map_wide'
+logging: 'True'
 # characteristic number for map
 perf_num: 6
 
