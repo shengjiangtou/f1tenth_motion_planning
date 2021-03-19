@@ -54,6 +54,59 @@ def pi_2_pi(angle):
 
     return angle
 
+@njit(fastmath=False, cache=True)
+def SolveLQRProblem(A, B, Q, R, tolerance, max_num_iteration):
+    """
+        Solve the discrete time lqr controller.
+        x[k+1] = A x[k] + B u[k]
+        cost = sum x[k].T*Q*x[k] + u[k].T*R*u[k]
+        # ref Bertsekas, p.151
+    iteratively calculating feedback matrix K
+    :param A: matrix_a_
+    :param B: matrix_b_
+    :param Q: matrix_q_
+    :param R: matrix_r_
+    :param tolerance: lqr_eps
+    :param max_num_iteration: max_iteration
+    :return: feedback matrix K
+    """
+
+    # assert np.size(A, 0) == np.size(A, 1) and \
+    #        np.size(B, 0) == np.size(A, 0) and \
+    #        np.size(Q, 0) == np.size(Q, 1) and \
+    #        np.size(Q, 0) == np.size(A, 1) and \
+    #        np.size(R, 0) == np.size(R, 1) and \
+    #        np.size(R, 0) == np.size(B, 1), \
+    #     "LQR solver: one or more matrices have incompatible dimensions."
+
+    M = np.zeros((Q.shape[0], R.shape[1]))
+
+    AT = A.T
+    BT = B.T
+    MT = M.T
+
+    P = Q
+    num_iteration = 0
+    diff = math.inf
+
+    # First, try to solve a discrete time_Algebraic Riccati equation (DARE)
+    while num_iteration < max_num_iteration and diff > tolerance:
+        num_iteration += 1
+        P_next = AT @ P @ A - (AT @ P @ B + M) @ \
+                 np.linalg.pinv(R + BT @ P @ B) @ (BT @ P @ A + MT) + Q
+
+        # check the difference between P and P_next
+        # diff = (abs(P_next - P)).max()
+        diff = np.abs(np.max(P_next - P))
+        P = P_next
+
+    # if num_iteration >= max_num_iteration:
+    #     print("LQR solver cannot converge to a solution", "last consecutive result diff is: ", diff)
+
+    # Compute the LQR gain by iteratively calculating feedback matrix K
+    K = np.linalg.pinv(BT @ P @ B + R) @ (BT @ P @ A + MT)
+
+    return K
 
 class Datalogger:
     """
@@ -90,9 +143,10 @@ class LQR_Kinematic_Planner:
     Lateral Controller using LQR
     """
 
-    def __init__(self, conf, wb):
+    def __init__(self, conf, env, wb):
         self.wheelbase = wb                 # Wheelbase of the vehicle
         self.conf = conf                    # Current configuration for the gym based on the maps
+        self.env = env                     # Current environment parameter
         self.load_waypoints(conf)           # Waypoints of the raceline
         self.max_reacquire = 20.
         self.vehicle_control_e_cog = 0       # e_cg: lateral error of CoG to ref trajectory
@@ -188,7 +242,7 @@ class LQR_Kinematic_Planner:
         matrix_q_ = np.diag(matrix_q)           # Extract the diagonal array from the Q Matrix
 
         # Calculating the optimal gain matrix K, given a state-space model for the plant and weighting matrices Q, R
-        matrix_k_ = self.SolveLQRProblem(matrix_ad_, matrix_bd_, matrix_q_,
+        matrix_k_ = SolveLQRProblem(matrix_ad_, matrix_bd_, matrix_q_,
                                          matrix_r_, eps, max_iteration)
 
         # Create the state vector (4x1): x = [e_cog, dot_e_cog, theta_e, dot_theta_e]
@@ -204,6 +258,7 @@ class LQR_Kinematic_Planner:
 
         # Calculate feed forward control term to decrease the steady error
         steer_angle_feedforward = k_ref * self.wheelbase
+        #steer_angle_feedforward = self.ComputeFeedForward_Dynamic(vehicle_state, k_ref,matrix_k_)
 
         # Calculate final steering angle in [rad]
         steer_angle = steer_angle_feedback + steer_angle_feedforward
@@ -212,6 +267,35 @@ class LQR_Kinematic_Planner:
         speed = v_ref * vgain
 
         return steer_angle, speed
+
+
+    def ComputeFeedForward_Dynamic(self, vehicle_state, ref_curvature, matrix_k_):
+        """
+        calc feedforward control term to decrease the steady error.
+        :param vehicle_state: vehicle state
+        :param ref_curvature: curvature of the target point in ref trajectory
+        :param matrix_k_: feedback matrix K
+        :return: feedforward term
+        """
+        mass = self.env.params['m']
+        l_f = self.env.params['m']
+        l_r = self.env.params['m']
+        wheelbase_ = l_f + l_r
+
+        kv = l_r * mass_ / 2.0 / c_f / wheelbase_ - \
+             l_f * mass_ / 2.0 / c_r / wheelbase_
+
+        v = vehicle_state.v
+
+        if vehicle_state.gear == Gear.GEAR_REVERSE:
+            steer_angle_feedforward = wheelbase_ * ref_curvature
+        else:
+            steer_angle_feedforward = wheelbase_ * ref_curvature + kv * v * v * ref_curvature - \
+                                      matrix_k_[0][2] * \
+                                      (l_r * ref_curvature -
+                                       l_f * mass_ * v * v * ref_curvature / 2.0 / c_r / wheelbase_)
+
+        return steer_angle_feedforward
 
     @staticmethod
     def UpdateMatrix(vehicle_state,state_size,timestep,wheelbase):
@@ -237,59 +321,6 @@ class LQR_Kinematic_Planner:
 
         return matrix_ad_, matrix_bd_
 
-    @staticmethod
-    def SolveLQRProblem(A, B, Q, R, tolerance, max_num_iteration):
-        """
-        Solve the discrete time lqr controller.
-        x[k+1] = A x[k] + B u[k]
-        cost = sum x[k].T*Q*x[k] + u[k].T*R*u[k]
-        # ref Bertsekas, p.151
-
-        :param A: matrix_a_
-        :param B: matrix_b_
-        :param Q: matrix_q_
-        :param R: matrix_r_
-        :param tolerance: lqr_eps
-        :param max_num_iteration: max_iteration
-        :return: feedback matrix K
-        """
-
-        assert np.size(A, 0) == np.size(A, 1) and \
-               np.size(B, 0) == np.size(A, 0) and \
-               np.size(Q, 0) == np.size(Q, 1) and \
-               np.size(Q, 0) == np.size(A, 1) and \
-               np.size(R, 0) == np.size(R, 1) and \
-               np.size(R, 0) == np.size(B, 1), \
-            "LQR solver: one or more matrices have incompatible dimensions."
-
-        M = np.zeros((np.size(Q, 0), np.size(R, 1)))
-
-        AT = A.T
-        BT = B.T
-        MT = M.T
-
-        P = Q
-        num_iteration = 0
-        diff = math.inf
-
-        # First, try to solve a discrete time_Algebraic Riccati equation (DARE)
-        while num_iteration < max_num_iteration and diff > tolerance:
-            num_iteration += 1
-            P_next = AT @ P @ A - (AT @ P @ B + M) @ \
-                     np.linalg.pinv(R + BT @ P @ B) @ (BT @ P @ A + MT) + Q
-
-            # check the difference between P and P_next
-            diff = (abs(P_next - P)).max()
-            P = P_next
-
-        if num_iteration >= max_num_iteration:
-            print("LQR solver cannot converge to a solution", "last consecutive result diff is: ", diff)
-
-        # Compute the LQR gain by iteratively calculating feedback matrix K
-        K = np.linalg.inv(BT @ P @ B + R) @ (BT @ P @ A + MT)
-
-        return K
-
     def plan(self, pose_x, pose_y, pose_theta, velocity, vgain, timestep):
         #Define a numpy array that includes the current vehicle state: x,y, theta, veloctiy
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
@@ -312,7 +343,7 @@ if __name__ == '__main__':
     env.render()
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
-    planner = LQR_Kinematic_Planner(conf, 0.17145 + 0.15875)
+    planner = LQR_Kinematic_Planner(conf, env, 0.17145 + 0.15875)
 
     # Creating a Datalogger object that saves all necessary vehicle data
     logging = Datalogger(conf)
