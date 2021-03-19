@@ -168,7 +168,7 @@ class LQR_Kinematic_Planner:
         state_size = 4
         matrix_q = [0.7, 0.0, 1.2, 0.0]
         matrix_r = [1.0]
-        max_iteration = 250
+        max_iteration = 150
         eps = 0.001
 
         # Use the timestep of the simulation as a controller input calculation
@@ -208,7 +208,6 @@ class LQR_Kinematic_Planner:
         speed = v_ref * vgain
 
         return steer_angle, speed
-
 
     @staticmethod
     def SolveLQRProblem(A, B, Q, R, tolerance, max_num_iteration):
