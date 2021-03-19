@@ -70,15 +70,6 @@ def SolveLQRProblem(A, B, Q, R, tolerance, max_num_iteration):
     :param max_num_iteration: max_iteration
     :return: feedback matrix K
     """
-
-    # assert np.size(A, 0) == np.size(A, 1) and \
-    #        np.size(B, 0) == np.size(A, 0) and \
-    #        np.size(Q, 0) == np.size(Q, 1) and \
-    #        np.size(Q, 0) == np.size(A, 1) and \
-    #        np.size(R, 0) == np.size(R, 1) and \
-    #        np.size(R, 0) == np.size(B, 1), \
-    #     "LQR solver: one or more matrices have incompatible dimensions."
-
     M = np.zeros((Q.shape[0], R.shape[1]))
 
     AT = A.T
@@ -100,13 +91,65 @@ def SolveLQRProblem(A, B, Q, R, tolerance, max_num_iteration):
         diff = np.abs(np.max(P_next - P))
         P = P_next
 
-    # if num_iteration >= max_num_iteration:
-    #     print("LQR solver cannot converge to a solution", "last consecutive result diff is: ", diff)
-
     # Compute the LQR gain by iteratively calculating feedback matrix K
     K = np.linalg.pinv(BT @ P @ B + R) @ (BT @ P @ A + MT)
 
     return K
+
+@njit(fastmath=False, cache=True)
+def UpdateMatrix(vehicle_state,state_size,timestep,wheelbase):
+    """
+    calc A and b matrices of linearized, discrete system.
+    :return: A, b
+    """
+
+    #Current vehicle velocity
+    v = vehicle_state[3]
+
+    #Initialization of the time discrete A matrix
+    matrix_ad_ = np.zeros((state_size, state_size))
+
+    matrix_ad_[0][0] = 1.0
+    matrix_ad_[0][1] = timestep
+    matrix_ad_[1][2] = v
+    matrix_ad_[2][2] = 1.0
+    matrix_ad_[2][3] = timestep
+
+    # b = [0.0, 0.0, 0.0, v / L].T
+    matrix_bd_ = np.zeros((state_size, 1))  # time discrete b matrix
+    matrix_bd_[3][0] = v / wheelbase
+
+    return matrix_ad_, matrix_bd_
+
+
+def ComputeFeedForward_Dynamic(vehicle_state, ref_curvature, matrix_k_, env):
+    """
+    calc feedforward control term to decrease the steady error.
+    :param vehicle_state: vehicle state
+    :param ref_curvature: curvature of the target point in ref trajectory
+    :param matrix_k_: feedback matrix K
+    :return: feedforward term
+    """
+    mass = env.params['m']  # mass in [kg]
+    l_f = env.params['lf']  # Distance CoG to front in [m]
+    l_r = env.params['lr']  # Distance CoG to back in [m]
+    c_f = env.params['C_Sf']  # Cornering Stiffness front in [N]
+    c_r = env.params['C_Sr']  # Cornering Stiffness back in [N]
+    wheelbase_ = l_f + l_r  # Wheelbase of the car in [m]
+    v = vehicle_state[3]                # Current velocity in [m/s]
+
+    kv = l_r * mass / 2.0 / c_f / wheelbase_ - \
+         l_f * mass / 2.0 / c_r / wheelbase_
+
+
+
+
+    steer_angle_feedforward = wheelbase_ * ref_curvature + kv * v * v * ref_curvature - \
+                                  matrix_k_[0][2] * \
+                                  (l_r * ref_curvature -
+                                   l_f * mass * v * v * ref_curvature / 2.0 / c_r / wheelbase_)
+
+    return steer_angle_feedforward
 
 class Datalogger:
     """
@@ -235,7 +278,7 @@ class LQR_Kinematic_Planner:
         theta_e, e_cog, yaw_ref, k_ref, v_ref = self.calc_control_points(vehicle_state,waypoints)
 
         #Update the calculation matrix based on the current vehicle state
-        matrix_ad_, matrix_bd_ = self.UpdateMatrix(vehicle_state, state_size,timestep,self.wheelbase)
+        matrix_ad_, matrix_bd_ = UpdateMatrix(vehicle_state, state_size,timestep,self.wheelbase)
 
         ##################  Solving the LQR problem
         matrix_r_ = np.diag(matrix_r)           # Extract the diagonal array from the R Matrix
@@ -257,8 +300,9 @@ class LQR_Kinematic_Planner:
         steer_angle_feedback = (matrix_k_ @ matrix_state_)[0][0]
 
         # Calculate feed forward control term to decrease the steady error
+        # steer_angle_feedforward = ComputeFeedForward_Dynamic(vehicle_state, k_ref,matrix_k_,self.env)
         steer_angle_feedforward = k_ref * self.wheelbase
-        #steer_angle_feedforward = self.ComputeFeedForward_Dynamic(vehicle_state, k_ref,matrix_k_)
+
 
         # Calculate final steering angle in [rad]
         steer_angle = steer_angle_feedback + steer_angle_feedforward
@@ -267,59 +311,6 @@ class LQR_Kinematic_Planner:
         speed = v_ref * vgain
 
         return steer_angle, speed
-
-
-    def ComputeFeedForward_Dynamic(self, vehicle_state, ref_curvature, matrix_k_):
-        """
-        calc feedforward control term to decrease the steady error.
-        :param vehicle_state: vehicle state
-        :param ref_curvature: curvature of the target point in ref trajectory
-        :param matrix_k_: feedback matrix K
-        :return: feedforward term
-        """
-        mass = self.env.params['m']
-        l_f = self.env.params['m']
-        l_r = self.env.params['m']
-        wheelbase_ = l_f + l_r
-
-        kv = l_r * mass_ / 2.0 / c_f / wheelbase_ - \
-             l_f * mass_ / 2.0 / c_r / wheelbase_
-
-        v = vehicle_state.v
-
-        if vehicle_state.gear == Gear.GEAR_REVERSE:
-            steer_angle_feedforward = wheelbase_ * ref_curvature
-        else:
-            steer_angle_feedforward = wheelbase_ * ref_curvature + kv * v * v * ref_curvature - \
-                                      matrix_k_[0][2] * \
-                                      (l_r * ref_curvature -
-                                       l_f * mass_ * v * v * ref_curvature / 2.0 / c_r / wheelbase_)
-
-        return steer_angle_feedforward
-
-    @staticmethod
-    def UpdateMatrix(vehicle_state,state_size,timestep,wheelbase):
-        """
-        calc A and b matrices of linearized, discrete system.
-        :return: A, b
-        """
-        #Current vehicle velocity
-        v = vehicle_state[3]
-
-        #Initialization of the time discrete A matrix
-        matrix_ad_ = np.zeros((state_size, state_size))
-
-        matrix_ad_[0][0] = 1.0
-        matrix_ad_[0][1] = timestep
-        matrix_ad_[1][2] = v
-        matrix_ad_[2][2] = 1.0
-        matrix_ad_[2][3] = timestep
-
-        # b = [0.0, 0.0, 0.0, v / L].T
-        matrix_bd_ = np.zeros((state_size, 1))  # time discrete b matrix
-        matrix_bd_[3][0] = v / wheelbase
-
-        return matrix_ad_, matrix_bd_
 
     def plan(self, pose_x, pose_y, pose_theta, velocity, vgain, timestep):
         #Define a numpy array that includes the current vehicle state: x,y, theta, veloctiy
