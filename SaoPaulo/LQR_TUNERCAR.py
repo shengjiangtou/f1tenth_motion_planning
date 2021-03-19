@@ -55,36 +55,6 @@ def pi_2_pi(angle):
     return angle
 
 
-class Datalogger:
-    """
-    This is the class for logging vehicle data in the F1TENTH Gym
-    """
-    def load_waypoints(self, conf):
-        """
-        Loading the x and y waypoints in the "..._raceline.csv" which includes the path to follow
-        """
-        self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
-
-    def __init__(self, conf):
-        self.conf = conf                            # Current configuration for the gym based on the maps
-        self.load_waypoints(conf)                   # Waypoints of the raceline
-        self.vehicle_position_x = []                # Current vehicle position X (rear axle) on the map
-        self.vehicle_position_y = []                # Current vehicle position Y (rear axle) on the map
-        self.vehicle_position_heading = []          # Current vehicle heading on the map
-        self.vehicle_velocity = []                  # Current vehicle velocity
-        self.control_velocity = []                  # Desired vehicle velocity based on control calculation
-        self.steering_angle = []                    # Steering angle based on control calculation
-        self.lapcounter = []                        # Current vehicle velocity
-
-    def logging(self, pose_x, pose_y, pose_theta, current_velocity, lap, control_veloctiy, control_steering):
-        self.vehicle_position_x.append(pose_x)
-        self.vehicle_position_y.append(pose_y)
-        self.vehicle_position_heading.append(pose_theta)
-        self.vehicle_velocity.append(current_velocity)
-        self.control_velocity.append(control_veloctiy)
-        self.steering_angle.append(control_steering)
-        self.lapcounter.append(lap)
-
 class LQR_Kinematic_Planner:
     """
     Lateral Controller using LQR
@@ -158,7 +128,7 @@ class LQR_Kinematic_Planner:
 
         return theta_e, ef[0], theta_raceline, kappa_ref, goal_veloctiy
 
-    def controller(self, vehicle_state, waypoints, vgain, timestep):
+    def controller(self, vehicle_state, waypoints, vgain, timestep, matrix_q, matrix_r, max_iteration , eps):
         """
         ComputeControlCommand calc lateral control command.
         :param vehicle_state: vehicle state
@@ -166,10 +136,7 @@ class LQR_Kinematic_Planner:
         :return: steering angle (optimal u), theta_e, e_cg
         """
         state_size = 4
-        matrix_q = [0.7, 0.0, 1.2, 0.0]
-        matrix_r = [1.0]
-        max_iteration = 150
-        eps = 0.001
+
 
         # Use the timestep of the simulation as a controller input calculation
         ts_ = timestep
@@ -281,20 +248,29 @@ class LQR_Kinematic_Planner:
 
         return matrix_ad_, matrix_bd_
 
-    def plan(self, pose_x, pose_y, pose_theta, velocity, vgain, timestep):
+    def plan(self, pose_x, pose_y, pose_theta, velocity, vgain, timestep,
+             matrix_q_1, matrix_q_2,matrix_q_3, matrix_q_4, matrix_r, iterations, eps):
+
+        #Define LQR Matrix and Parameter
+        matrix_q = [matrix_q_1, matrix_q_2, matrix_q_3, matrix_q_4]
+        matrix_r = [matrix_r]
+
         #Define a numpy array that includes the current vehicle state: x,y, theta, veloctiy
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
         #Calculate the steering angle and the speed in the controller
-        steering_angle, speed = self.controller(vehicle_state, self.waypoints, vgain,timestep)
+        steering_angle, speed = self.controller(vehicle_state, self.waypoints, vgain,timestep, matrix_q, matrix_r, iterations, eps)
 
         return speed,steering_angle
 
 
 if __name__ == '__main__':
 
-    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.85}
-    with open('config_Spielberg_map.yaml') as file:
+    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.85,
+            'matrix_q_1':0.7, 'matrix_q_2': 0.0, 'matrix_q_3':1.2, 'matrix_q_4':0.0,
+            'matrix_r':1.0, 'iterations': 150, 'eps': 0.001}
+
+    with open('config_SaoPaulo.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
 
@@ -305,22 +281,16 @@ if __name__ == '__main__':
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = LQR_Kinematic_Planner(conf, 0.17145 + 0.15875)
 
-    # Creating a Datalogger object that saves all necessary vehicle data
-    logging = Datalogger(conf)
-
     laptime = 0.0
     start = time.time()
 
     while not done:
-        speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], work['vgain'],env.timestep)
+        speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], work['vgain'],env.timestep,
+                                    work['matrix_q_1'],work['matrix_q_2'],work['matrix_q_3'],work['matrix_q_4'],
+                                    work['matrix_r'], work['iterations'], work['eps'])
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
         env.render(mode='human_fast')
 
-        if conf_dict['logging'] == 'True':
-            logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
-
-    if conf_dict['logging'] == 'True':
-        pickle.dump(logging, open("datalogging.p", "wb"))
     print('Sim elapsed time:', laptime, 'Real elapsed time:', time.time()-start)
