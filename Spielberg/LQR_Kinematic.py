@@ -198,26 +198,17 @@ class LQR_Kinematic_Planner:
 
         steer_angle_feedback = (matrix_k_ @ matrix_state_)[0][0]
 
-        steer_angle_feedforward = self.ComputeFeedForward(k_ref, self.wheelbase)
+        #Compute feed forward control term to decrease the steady error.
+        steer_angle_feedforward = k_ref * self.wheelbase
 
+        # Calculate final steering angle in [rad]
         steer_angle = steer_angle_feedback + steer_angle_feedforward
 
         # Calculate final speed control input in [m/s]:
-        # speed_diff = k_veloctiy * (goal_veloctiy-velocity)
         speed = v_ref * vgain
 
         return steer_angle, speed
 
-    @staticmethod
-    def ComputeFeedForward(ref_curvature,wheelbase):
-        """
-        calc feedforward control term to decrease the steady error.
-        :param ref_curvature: curvature of the target point in ref trajectory
-        :return: feedforward term
-        """
-        steer_angle_feedforward = wheelbase * ref_curvature
-
-        return steer_angle_feedforward
 
     @staticmethod
     def SolveLQRProblem(A, B, Q, R, tolerance, max_num_iteration):
