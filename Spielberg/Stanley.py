@@ -197,6 +197,8 @@ if __name__ == '__main__':
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = StanleyPlanner(conf, 0.17145 + 0.15875)
+
+    # Creating a Datalogger object that saves all necessary vehicle data
     logging = Datalogger(conf)
 
     laptime = 0.0
