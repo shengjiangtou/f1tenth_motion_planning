@@ -122,7 +122,52 @@ def UpdateMatrix(vehicle_state,state_size,timestep,wheelbase):
     return matrix_ad_, matrix_bd_
 
 
-def ComputeFeedForward_Dynamic(vehicle_state, ref_curvature, matrix_k_, env):
+def UpdateMatrix_Dynamics(vehicle_state, state_size, timestep, vehicle_params):
+    """
+    calc A and b matrices of linearized, discrete system.
+    :return: A, b
+    """
+    mass = vehicle_params[0]                    # mass in [kg]
+    l_f = vehicle_params[1]                     # Distance CoG to front in [m]
+    l_r = vehicle_params[2]                     # Distance CoG to back in [m]
+    c_f = vehicle_params[3]                     # Cornering Stiffness front in [N]
+    c_r = vehicle_params[4]                     # Cornering Stiffness back in [N]
+    wheelbase_ = vehicle_params[5]              # Wheelbase of the car in [m]
+    Iz = vehicle_params[6]                      # Inertia [m]
+
+    #Current vehicle velocity
+    v = vehicle_state[3]
+
+    #Initialization of the time discrete A matrix
+    matrix_a_ = np.zeros((state_size, state_size))
+
+    matrix_a_[0][1] = 1.0
+    matrix_a_[0][2] = 0.0
+
+
+    matrix_a_[1][1] = -1.0 * (+ c_r) / mass / v
+    matrix_a_[1][2] = (c_f + c_r) / mass
+    matrix_a_[1][3] = (l_r * c_r - l_f * c_f) / mass / v
+    matrix_a_[2][3] = 1.0
+    matrix_a_[3][1] = (l_r * c_r - l_f * c_f) / Iz / v
+    matrix_a_[3][2] = (l_f * c_f - l_r * c_r) / Iz
+    matrix_a_[3][3] = -1.0 * (l_f ** 2 * c_f + l_r ** 2 * c_r) / Iz / v
+
+    # Tustin's method (bilinear transform)
+    matrix_i = np.eye(state_size)  # identical matrix
+    matrix_ad_ = np.linalg.pinv(matrix_i - timestep * 0.5 * matrix_a_) @ \
+                 (matrix_i + timestep * 0.5 * matrix_a_)  # discrete A matrix
+
+    # b = [0.0, c_f / m, 0.0, l_f * c_f / I_z].T
+    matrix_b_ = np.zeros((state_size, 1))  # continuous b matrix
+    matrix_b_[1][0] = c_f / mass
+    matrix_b_[3][0] = l_f * c_f / Iz
+    matrix_bd_ = matrix_b_ * timestep  # discrete b matrix
+
+    return matrix_ad_, matrix_bd_
+
+@njit(fastmath=False, cache=True)
+def ComputeFeedForward_Dynamic(vehicle_state, ref_curvature, matrix_k_, vehicle_params):
     """
     calc feedforward control term to decrease the steady error.
     :param vehicle_state: vehicle state
@@ -130,19 +175,16 @@ def ComputeFeedForward_Dynamic(vehicle_state, ref_curvature, matrix_k_, env):
     :param matrix_k_: feedback matrix K
     :return: feedforward term
     """
-    mass = env.params['m']  # mass in [kg]
-    l_f = env.params['lf']  # Distance CoG to front in [m]
-    l_r = env.params['lr']  # Distance CoG to back in [m]
-    c_f = env.params['C_Sf']  # Cornering Stiffness front in [N]
-    c_r = env.params['C_Sr']  # Cornering Stiffness back in [N]
-    wheelbase_ = l_f + l_r  # Wheelbase of the car in [m]
+    mass = vehicle_params[0]                    # mass in [kg]
+    l_f = vehicle_params[1]                     # Distance CoG to front in [m]
+    l_r = vehicle_params[2]                     # Distance CoG to back in [m]
+    c_f = vehicle_params[3]                     # Cornering Stiffness front in [N]
+    c_r = vehicle_params[4]                     # Cornering Stiffness back in [N]
+    wheelbase_ = vehicle_params[5]              # Wheelbase of the car in [m]
     v = vehicle_state[3]                # Current velocity in [m/s]
 
     kv = l_r * mass / 2.0 / c_f / wheelbase_ - \
          l_f * mass / 2.0 / c_r / wheelbase_
-
-
-
 
     steer_angle_feedforward = wheelbase_ * ref_curvature + kv * v * v * ref_curvature - \
                                   matrix_k_[0][2] * \
@@ -262,8 +304,17 @@ class LQR_Kinematic_Planner:
         :param ref_trajectory: reference trajectory (analyzer)f
         :return: steering angle (optimal u), theta_e, e_cg
         """
+        ###### Load vehicle parameter
+        mass = self.env.params['m']         # mass in [kg]
+        l_f = self.env.params['lf']         # Distance CoG to front in [m]
+        l_r = self.env.params['lr']         # Distance CoG to back in [m]
+        c_f = self.env.params['C_Sf']       # Cornering Stiffness front in [N]
+        c_r = self.env.params['C_Sr']       # Cornering Stiffness back in [N]
+        wheelbase = self.wheelbase          # Wheelbase of the car in [m]
+        Iz = self.env.params['I']           # Inertia of the car in [m]
+        vehicle_params = [mass, l_f, l_r, c_f, c_r, wheelbase,Iz]
 
-        # Setup and initialize the LQR parameter
+        ##### Setup and initialize the LQR parameter
         state_size = 4
         matrix_q = [0.80, 0.0, 1.2, 0.0]
         matrix_r = [1.0]
@@ -278,7 +329,8 @@ class LQR_Kinematic_Planner:
         theta_e, e_cog, yaw_ref, k_ref, v_ref = self.calc_control_points(vehicle_state,waypoints)
 
         #Update the calculation matrix based on the current vehicle state
-        matrix_ad_, matrix_bd_ = UpdateMatrix(vehicle_state, state_size,timestep,self.wheelbase)
+        #matrix_ad_, matrix_bd_ = UpdateMatrix(vehicle_state, state_size,timestep,self.wheelbase)
+        matrix_ad_, matrix_bd_ = UpdateMatrix_Dynamics(vehicle_state, state_size, timestep, vehicle_params)
 
         ##################  Solving the LQR problem
         matrix_r_ = np.diag(matrix_r)           # Extract the diagonal array from the R Matrix
@@ -300,8 +352,8 @@ class LQR_Kinematic_Planner:
         steer_angle_feedback = (matrix_k_ @ matrix_state_)[0][0]
 
         # Calculate feed forward control term to decrease the steady error
-        # steer_angle_feedforward = ComputeFeedForward_Dynamic(vehicle_state, k_ref,matrix_k_,self.env)
-        steer_angle_feedforward = k_ref * self.wheelbase
+        steer_angle_feedforward = ComputeFeedForward_Dynamic(vehicle_state, k_ref,matrix_k_,vehicle_params)
+        #steer_angle_feedforward = k_ref * self.wheelbase
 
 
         # Calculate final steering angle in [rad]
