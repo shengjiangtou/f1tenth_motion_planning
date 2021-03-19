@@ -144,12 +144,12 @@ class StanleyPlanner:
 
         return delta, speed
 
-    def plan(self, pose_x, pose_y, pose_theta, velocity, vgain, lap):
+    def plan(self, pose_x, pose_y, pose_theta, velocity, vgain):
         #Define a numpy array that includes the current vehicle state: x,y, theta, veloctiy
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
         #Calculate the steering angle and the speed in the controller
-        steering_angle, speed = self.controller(vehicle_state, self.waypoints, vgain,lap)
+        steering_angle, speed = self.controller(vehicle_state, self.waypoints, vgain)
 
         return speed,steering_angle
 

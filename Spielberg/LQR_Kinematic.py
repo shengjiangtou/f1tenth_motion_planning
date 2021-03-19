@@ -115,8 +115,8 @@ class LQR_Kinematic_Planner:
 
         ############# Calculate closest point to the front axle based on minimum distance calculation ################
         # Calculate Position of the front axle of the vehicle based on current position
-        fx = vehicle_state[0] + self.wheelbase * math.cos(vehicle_state[2])
-        fy = vehicle_state[1] + self.wheelbase * math.sin(vehicle_state[2])
+        fx = vehicle_state[0] + self.wheelbase/2 * math.cos(vehicle_state[2])
+        fy = vehicle_state[1] + self.wheelbase/2 * math.sin(vehicle_state[2])
         position_front_axle = np.array([fx, fy])
 
         # Find target index for the correct waypoint by finding the index with the lowest distance value/hypothenuses
@@ -165,40 +165,44 @@ class LQR_Kinematic_Planner:
         :param ref_trajectory: reference trajectory (analyzer)f
         :return: steering angle (optimal u), theta_e, e_cg
         """
+
+        # Setup and initialize the LQR parameter
         state_size = 4
-        matrix_q = [0.7, 0.0, 1.2, 0.0]
+        matrix_q = [0.80, 0.0, 1.2, 0.0]
         matrix_r = [1.0]
         max_iteration = 150
         eps = 0.001
-
-        # Use the timestep of the simulation as a controller input calculation
-        ts_ = timestep
 
         # Saving lateral error and heading error from previous timestep
         e_cog_old = self.vehicle_control_e_cog
         theta_e_old = self.vehicle_control_theta_e
 
         # Calculating current errors and reference points from reference trajectory
-        theta_e, e_cg, yaw_ref, k_ref, v_ref = self.calc_control_points(vehicle_state,waypoints)
+        theta_e, e_cog, yaw_ref, k_ref, v_ref = self.calc_control_points(vehicle_state,waypoints)
 
         #Update the calculation matrix based on the current vehicle state
         matrix_ad_, matrix_bd_ = self.UpdateMatrix(vehicle_state, state_size,timestep,self.wheelbase)
 
-        matrix_state_ = np.zeros((state_size, 1))
-        matrix_r_ = np.diag(matrix_r)
-        matrix_q_ = np.diag(matrix_q)
+        ##################  Solving the LQR problem
+        matrix_r_ = np.diag(matrix_r)           # Extract the diagonal array from the R Matrix
+        matrix_q_ = np.diag(matrix_q)           # Extract the diagonal array from the Q Matrix
 
+        # Calculating the optimal gain matrix K, given a state-space model for the plant and weighting matrices Q, R
         matrix_k_ = self.SolveLQRProblem(matrix_ad_, matrix_bd_, matrix_q_,
                                          matrix_r_, eps, max_iteration)
 
-        matrix_state_[0][0] = e_cg
-        matrix_state_[1][0] = (e_cg - e_cog_old) / ts_
-        matrix_state_[2][0] = theta_e
-        matrix_state_[3][0] = (theta_e - theta_e_old) / ts_
+        # Create the state vector (4x1): x = [e_cog, dot_e_cog, theta_e, dot_theta_e]
+        matrix_state_ = np.zeros((state_size, 1))                    # Initialize State vectors
+        matrix_state_[0][0] = e_cog                                  # Current lateral distance e_cog to optimal path
+        matrix_state_[1][0] = (e_cog - e_cog_old) / timestep         # Derivative of e_cog
+        matrix_state_[2][0] = theta_e                                # Current heading difference to optimal path
+        matrix_state_[3][0] = (theta_e - theta_e_old) / timestep     # Derivative of theta_e
 
+        # Calculate feedback steering angle
+        # Input vector u = [delta], matrix_k * state ectors
         steer_angle_feedback = (matrix_k_ @ matrix_state_)[0][0]
 
-        #Compute feed forward control term to decrease the steady error.
+        # Calculate feed forward control term to decrease the steady error
         steer_angle_feedforward = k_ref * self.wheelbase
 
         # Calculate final steering angle in [rad]
@@ -208,6 +212,30 @@ class LQR_Kinematic_Planner:
         speed = v_ref * vgain
 
         return steer_angle, speed
+
+    @staticmethod
+    def UpdateMatrix(vehicle_state,state_size,timestep,wheelbase):
+        """
+        calc A and b matrices of linearized, discrete system.
+        :return: A, b
+        """
+        #Current vehicle velocity
+        v = vehicle_state[3]
+
+        #Initialization of the time discrete A matrix
+        matrix_ad_ = np.zeros((state_size, state_size))
+
+        matrix_ad_[0][0] = 1.0
+        matrix_ad_[0][1] = timestep
+        matrix_ad_[1][2] = v
+        matrix_ad_[2][2] = 1.0
+        matrix_ad_[2][3] = timestep
+
+        # b = [0.0, 0.0, 0.0, v / L].T
+        matrix_bd_ = np.zeros((state_size, 1))  # time discrete b matrix
+        matrix_bd_[3][0] = v / wheelbase
+
+        return matrix_ad_, matrix_bd_
 
     @staticmethod
     def SolveLQRProblem(A, B, Q, R, tolerance, max_num_iteration):
@@ -256,31 +284,6 @@ class LQR_Kinematic_Planner:
 
         return K
 
-    @staticmethod
-    def UpdateMatrix(vehicle_state,state_size,timestep,wheelbase):
-        """
-        calc A and b matrices of linearized, discrete system.
-        :return: A, b
-        """
-
-        #Current vehicle velocity
-        v = vehicle_state[3]
-
-        #Initialization of the time discrete A matrix
-        matrix_ad_ = np.zeros((state_size, state_size))
-
-        matrix_ad_[0][0] = 1.0
-        matrix_ad_[0][1] = timestep
-        matrix_ad_[1][2] = v
-        matrix_ad_[2][2] = 1.0
-        matrix_ad_[2][3] = timestep
-
-        # b = [0.0, 0.0, 0.0, v / L].T
-        matrix_bd_ = np.zeros((state_size, 1))  # time discrete b matrix
-        matrix_bd_[3][0] = v / wheelbase
-
-        return matrix_ad_, matrix_bd_
-
     def plan(self, pose_x, pose_y, pose_theta, velocity, vgain, timestep):
         #Define a numpy array that includes the current vehicle state: x,y, theta, veloctiy
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
@@ -293,7 +296,7 @@ class LQR_Kinematic_Planner:
 
 if __name__ == '__main__':
 
-    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.85}
+    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.80}
     with open('config_Spielberg_map.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
