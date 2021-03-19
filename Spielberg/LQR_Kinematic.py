@@ -240,7 +240,11 @@ class LQR_Kinematic_Planner:
     @staticmethod
     def SolveLQRProblem(A, B, Q, R, tolerance, max_num_iteration):
         """
-        iteratively calculating feedback matrix K
+        Solve the discrete time lqr controller.
+        x[k+1] = A x[k] + B u[k]
+        cost = sum x[k].T*Q*x[k] + u[k].T*R*u[k]
+        # ref Bertsekas, p.151
+
         :param A: matrix_a_
         :param B: matrix_b_
         :param Q: matrix_q_
@@ -268,6 +272,7 @@ class LQR_Kinematic_Planner:
         num_iteration = 0
         diff = math.inf
 
+        # First, try to solve a discrete time_Algebraic Riccati equation (DARE)
         while num_iteration < max_num_iteration and diff > tolerance:
             num_iteration += 1
             P_next = AT @ P @ A - (AT @ P @ B + M) @ \
@@ -280,6 +285,7 @@ class LQR_Kinematic_Planner:
         if num_iteration >= max_num_iteration:
             print("LQR solver cannot converge to a solution", "last consecutive result diff is: ", diff)
 
+        # Compute the LQR gain by iteratively calculating feedback matrix K
         K = np.linalg.inv(BT @ P @ B + R) @ (BT @ P @ A + MT)
 
         return K
