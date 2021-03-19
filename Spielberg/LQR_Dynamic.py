@@ -121,6 +121,77 @@ def UpdateMatrix(vehicle_state,state_size,timestep,wheelbase):
 
     return matrix_ad_, matrix_bd_
 
+@njit(fastmath=False, cache=True)
+def UpdateMatrix_Dynamics(vehicle_state, state_size, timestep, vehicle_params):
+    """
+    calc A and b matrices of linearized, discrete system.
+    :return: A, b
+    """
+    mass = vehicle_params[0]                    # mass in [kg]
+    l_f = vehicle_params[1]                     # Distance CoG to front in [m]
+    l_r = vehicle_params[2]                     # Distance CoG to back in [m]
+    c_f = vehicle_params[3]                     # Cornering Stiffness front in [N]
+    c_r = vehicle_params[4]                     # Cornering Stiffness back in [N]
+    Iz = vehicle_params[6]                      # Inertia [m]
+    v = vehicle_state[3]                        # #Current vehicle velocity [m/s]
+
+    if v == 0:
+        v = 0.00000001
+    #Initialization of the time discrete A matrix
+    matrix_a_ = np.zeros((state_size, state_size))
+
+    matrix_a_[0][1] = 1.0
+    matrix_a_[0][2] = 0.0
+
+    matrix_a_[1][1] = -1.0 * (+ c_r) / mass / v
+    matrix_a_[1][2] = (c_f + c_r) / mass
+    matrix_a_[1][3] = (l_r * c_r - l_f * c_f) / mass / v
+    matrix_a_[2][3] = 1.0
+    matrix_a_[3][1] = (l_r * c_r - l_f * c_f) / Iz / v
+    matrix_a_[3][2] = (l_f * c_f - l_r * c_r) / Iz
+    matrix_a_[3][3] = -1.0 * (l_f ** 2 * c_f + l_r ** 2 * c_r) / Iz / v
+
+    # Tustin's method (bilinear transform)
+    matrix_i = np.eye(state_size)  # identical matrix
+    matrix_ad_ = np.linalg.pinv(matrix_i - timestep * 0.5 * matrix_a_) @ \
+                 (matrix_i + timestep * 0.5 * matrix_a_)  # discrete A matrix
+
+    # b = [0.0, c_f / m, 0.0, l_f * c_f / I_z].T
+    matrix_b_ = np.zeros((state_size, 1))  # continuous b matrix
+    matrix_b_[1][0] = c_f / mass
+    matrix_b_[3][0] = l_f * c_f / Iz
+    matrix_bd_ = matrix_b_ * timestep  # discrete b matrix
+
+    return matrix_ad_, matrix_bd_
+
+
+def ComputeFeedForward_Dynamic(vehicle_state, ref_curvature, matrix_k_, vehicle_params):
+    """
+    calc feedforward control term to decrease the steady error.
+    :param vehicle_state: vehicle state
+    :param ref_curvature: curvature of the target point in ref trajectory
+    :param matrix_k_: feedback matrix K
+    :return: feedforward term
+    """
+    mass = vehicle_params[0]                    # mass in [kg]
+    l_f = vehicle_params[1]                     # Distance CoG to front in [m]
+    l_r = vehicle_params[2]                     # Distance CoG to back in [m]
+    c_f = vehicle_params[3]                     # Cornering Stiffness front in [N]
+    c_r = vehicle_params[4]                     # Cornering Stiffness back in [N]
+    wheelbase_ = vehicle_params[5]              # Wheelbase of the car in [m]
+    wheelbase2 = l_f+l_r
+    v = vehicle_state[3]                        # Current velocity in [m/s]
+
+    kv = l_r * mass / 2.0 / c_f / wheelbase_ - \
+         l_f * mass / 2.0 / c_r / wheelbase_
+
+    steer_angle_feedforward = wheelbase_ * ref_curvature + kv * v * v * ref_curvature - \
+                                  matrix_k_[0][2] * \
+                                  (l_r * ref_curvature -
+                                   l_f * mass * v * v * ref_curvature / 2.0 / c_r / wheelbase_)
+
+    return steer_angle_feedforward
+
 class Datalogger:
     """
     This is the class for logging vehicle data in the F1TENTH Gym
@@ -141,6 +212,10 @@ class Datalogger:
         self.control_velocity = []                  # Desired vehicle velocity based on control calculation
         self.steering_angle = []                    # Steering angle based on control calculation
         self.lapcounter = []                        # Current vehicle velocity
+        self.heading_error = []                     # Control error heading
+        self.lateral_error = []                     # Control error lateral
+        self.reference_curvature = []               # Reference Curvature
+
 
     def logging(self, pose_x, pose_y, pose_theta, current_velocity, lap, control_veloctiy, control_steering):
         self.vehicle_position_x.append(pose_x)
@@ -150,6 +225,12 @@ class Datalogger:
         self.control_velocity.append(control_veloctiy)
         self.steering_angle.append(control_steering)
         self.lapcounter.append(lap)
+
+    def logging_control(self, theta_e, lat_e, k_ref):
+        self.heading_error.append(theta_e)
+        self.lateral_error.append(lat_e)
+        self.reference_curvature.append(k_ref)
+
 
 class LQR_Kinematic_Planner:
     """
@@ -232,12 +313,21 @@ class LQR_Kinematic_Planner:
         :param ref_trajectory: reference trajectory (analyzer)f
         :return: steering angle (optimal u), theta_e, e_cg
         """
+        ###### Load vehicle parameter
+        mass = self.env.params['m']         # mass in [kg]
+        l_f = self.env.params['lf']         # Distance CoG to front in [m]
+        l_r = self.env.params['lr']         # Distance CoG to back in [m]
+        c_f = self.env.params['C_Sf']       # Cornering Stiffness front in [N]
+        c_r = self.env.params['C_Sr']       # Cornering Stiffness back in [N]
+        wheelbase = self.wheelbase          # Wheelbase of the car in [m]
+        Iz = self.env.params['I']           # Inertia of the car in [m]
+        vehicle_params = [mass, l_f, l_r, c_f, c_r, wheelbase,Iz]
 
         ##### Setup and initialize the LQR parameter
         state_size = 4
         matrix_q = [0.80, 0.0, 1.2, 0.0]
         matrix_r = [1.0]
-        max_iteration = 150
+        max_iteration = 250
         eps = 0.001
 
         # Saving lateral error and heading error from previous timestep
@@ -248,7 +338,8 @@ class LQR_Kinematic_Planner:
         theta_e, e_cog, yaw_ref, k_ref, v_ref = self.calc_control_points(vehicle_state,waypoints)
 
         #Update the calculation matrix based on the current vehicle state
-        matrix_ad_, matrix_bd_ = UpdateMatrix(vehicle_state, state_size,timestep,self.wheelbase)
+        #matrix_ad_, matrix_bd_ = UpdateMatrix(vehicle_state, state_size,timestep,self.wheelbase)
+        matrix_ad_, matrix_bd_ = UpdateMatrix_Dynamics(vehicle_state, state_size, timestep, vehicle_params)
 
         ##################  Solving the LQR problem
         matrix_r_ = np.diag(matrix_r)           # Extract the diagonal array from the R Matrix
@@ -270,13 +361,18 @@ class LQR_Kinematic_Planner:
         steer_angle_feedback = (matrix_k_ @ matrix_state_)[0][0]
 
         # Calculate feed forward control term to decrease the steady error
-        steer_angle_feedforward = k_ref * self.wheelbase
+        steer_angle_feedforward = ComputeFeedForward_Dynamic(vehicle_state, k_ref, matrix_k_, vehicle_params)
+        #steer_angle_feedforward = k_ref * self.wheelbase
+
 
         # Calculate final steering angle in [rad]
         steer_angle = steer_angle_feedback + steer_angle_feedforward
 
         # Calculate final speed control input in [m/s]:
         speed = v_ref * vgain
+
+        # Run Looging for control parameters
+        logging.logging_control(theta_e,e_cog,k_ref)
 
         return steer_angle, speed
 
@@ -292,7 +388,7 @@ class LQR_Kinematic_Planner:
 
 if __name__ == '__main__':
 
-    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.80}
+    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.60}
     with open('config_Spielberg_map.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
@@ -315,7 +411,7 @@ if __name__ == '__main__':
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        env.render(mode='human_fast')
+        env.render(mode='human')
 
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
