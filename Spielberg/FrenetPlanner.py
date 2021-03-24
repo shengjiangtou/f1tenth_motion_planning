@@ -48,80 +48,97 @@ def nearest_point_on_trajectory(point, trajectory):
     return projections[min_dist_segment], dists[min_dist_segment], t[min_dist_segment], min_dist_segment
 
 @njit(fastmath=False, cache=True)
-def pi_2_pi(angle):
-    if angle > math.pi:
-        return angle - 2.0 * math.pi
-    if angle < -math.pi:
-        return angle + 2.0 * math.pi
+def first_point_on_trajectory_intersecting_circle(point, radius, trajectory, t=0.0, wrap=False):
+    ''' starts at beginning of trajectory, and find the first point one radius away from the given point along the trajectory.
 
-    return angle
+    Assumes that the first segment passes within a single radius of the point
 
-@njit(fastmath=False, cache=True)
-def SolveLQRProblem(A, B, Q, R, tolerance, max_num_iteration):
-    """
-        Solve the discrete time lqr controller.
-        x[k+1] = A x[k] + B u[k]
-        cost = sum x[k].T*Q*x[k] + u[k].T*R*u[k]
-        # ref Bertsekas, p.151
-    iteratively calculating feedback matrix K
-    :param A: matrix_a_
-    :param B: matrix_b_
-    :param Q: matrix_q_
-    :param R: matrix_r_
-    :param tolerance: lqr_eps
-    :param max_num_iteration: max_iteration
-    :return: feedback matrix K
-    """
-    M = np.zeros((Q.shape[0], R.shape[1]))
+    http://codereview.stackexchange.com/questions/86421/line-segment-to-circle-collision-algorithm
+    '''
+    start_i = int(t)
+    start_t = t % 1.0
+    first_t = None
+    first_i = None
+    first_p = None
+    trajectory = np.ascontiguousarray(trajectory)
+    for i in range(start_i, trajectory.shape[0]-1):
+        start = trajectory[i,:]
+        end = trajectory[i+1,:]+1e-6
+        V = np.ascontiguousarray(end - start)
 
-    AT = A.T
-    BT = B.T
-    MT = M.T
+        a = np.dot(V,V)
+        b = 2.0*np.dot(V, start - point)
+        c = np.dot(start, start) + np.dot(point,point) - 2.0*np.dot(start, point) - radius*radius
+        discriminant = b*b-4*a*c
 
-    P = Q
-    num_iteration = 0
-    diff = math.inf
+        if discriminant < 0:
+            continue
+        #   print "NO INTERSECTION"
+        # else:
+        # if discriminant >= 0.0:
+        discriminant = np.sqrt(discriminant)
+        t1 = (-b - discriminant) / (2.0*a)
+        t2 = (-b + discriminant) / (2.0*a)
+        if i == start_i:
+            if t1 >= 0.0 and t1 <= 1.0 and t1 >= start_t:
+                first_t = t1
+                first_i = i
+                first_p = start + t1 * V
+                break
+            if t2 >= 0.0 and t2 <= 1.0 and t2 >= start_t:
+                first_t = t2
+                first_i = i
+                first_p = start + t2 * V
+                break
+        elif t1 >= 0.0 and t1 <= 1.0:
+            first_t = t1
+            first_i = i
+            first_p = start + t1 * V
+            break
+        elif t2 >= 0.0 and t2 <= 1.0:
+            first_t = t2
+            first_i = i
+            first_p = start + t2 * V
+            break
+    # wrap around to the beginning of the trajectory if no intersection is found1
+    if wrap and first_p is None:
+        for i in range(-1, start_i):
+            start = trajectory[i % trajectory.shape[0],:]
+            end = trajectory[(i+1) % trajectory.shape[0],:]+1e-6
+            V = end - start
 
-    # First, try to solve a discrete time_Algebraic Riccati equation (DARE)
-    while num_iteration < max_num_iteration and diff > tolerance:
-        num_iteration += 1
-        P_next = AT @ P @ A - (AT @ P @ B + M) @ \
-                 np.linalg.pinv(R + BT @ P @ B) @ (BT @ P @ A + MT) + Q
+            a = np.dot(V,V)
+            b = 2.0*np.dot(V, start - point)
+            c = np.dot(start, start) + np.dot(point,point) - 2.0*np.dot(start, point) - radius*radius
+            discriminant = b*b-4*a*c
 
-        # check the difference between P and P_next
-        # diff = (abs(P_next - P)).max()
-        diff = np.abs(np.max(P_next - P))
-        P = P_next
+            if discriminant < 0:
+                continue
+            discriminant = np.sqrt(discriminant)
+            t1 = (-b - discriminant) / (2.0*a)
+            t2 = (-b + discriminant) / (2.0*a)
+            if t1 >= 0.0 and t1 <= 1.0:
+                first_t = t1
+                first_i = i
+                first_p = start + t1 * V
+                break
+            elif t2 >= 0.0 and t2 <= 1.0:
+                first_t = t2
+                first_i = i
+                first_p = start + t2 * V
+                break
 
-    # Compute the LQR gain by iteratively calculating feedback matrix K
-    K = np.linalg.pinv(BT @ P @ B + R) @ (BT @ P @ A + MT)
+    return first_p, first_i, first_t
 
-    return K
-
-@njit(fastmath=False, cache=True)
-def UpdateMatrix(vehicle_state,state_size,timestep,wheelbase):
-    """
-    calc A and b matrices of linearized, discrete system.
-    :return: A, b
-    """
-
-    #Current vehicle velocity
-    v = vehicle_state[3]
-
-    #Initialization of the time discrete A matrix
-    matrix_ad_ = np.zeros((state_size, state_size))
-
-    matrix_ad_[0][0] = 1.0
-    matrix_ad_[0][1] = timestep
-    matrix_ad_[1][2] = v
-    matrix_ad_[2][2] = 1.0
-    matrix_ad_[2][3] = timestep
-
-    # b = [0.0, 0.0, 0.0, v / L].T
-    matrix_bd_ = np.zeros((state_size, 1))  # time discrete b matrix
-    matrix_bd_[3][0] = v / wheelbase
-
-    return matrix_ad_, matrix_bd_
+#@njit(fastmath=False, cache=True)
+def get_actuation(pose_theta, lookahead_point, position, lookahead_distance, wheelbase):
+    waypoint_y = np.dot(np.array([np.sin(-pose_theta), np.cos(-pose_theta)]), lookahead_point[0:2]-position)
+    speed = lookahead_point[2]
+    if np.abs(waypoint_y) < 1e-6:
+        return speed, 0.
+    radius = 1/(2.0*waypoint_y/lookahead_distance**2)
+    steering_angle = np.arctan(wheelbase/radius)
+    return speed, steering_angle
 
 class Datalogger:
     """
@@ -258,6 +275,53 @@ class FrenetPath:
         self.ds = []
         self.c = []
 
+class PurePursuitPlanner:
+    """
+    This is the PurePursuit ALgorithm that is traccking the desired path. In this case we are following the curvature
+    optimal raceline.
+    """
+    def __init__(self, conf, wb):
+        self.wheelbase = wb
+        self.conf = conf
+        self.load_waypoints(conf)
+        self.max_reacquire = 20.
+
+    def load_waypoints(self, conf):
+        # Loading the x and y waypoints in the "..._raceline.vsv" that include the path to follow
+        self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
+
+    def _get_current_waypoint(self, waypoints, lookahead_distance, position, theta):
+        # Find the current waypoint on the map and calculate the lookahead point for the controller
+        wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
+        nearest_point, nearest_dist, t, i = nearest_point_on_trajectory(position, wpts)
+        if nearest_dist < lookahead_distance:
+            lookahead_point, i2, t2 = first_point_on_trajectory_intersecting_circle(position, lookahead_distance, wpts, i+t, wrap=True)
+            if i2 == None:
+                return None
+            current_waypoint = np.empty((3, ))
+            # x, y
+            current_waypoint[0:2] = wpts[i2, :]
+            # speed
+            current_waypoint[2] = waypoints[i, self.conf.wpt_vind]
+            return current_waypoint
+        elif nearest_dist < self.max_reacquire:
+            return np.append(wpts[i, :], waypoints[i, self.conf.wpt_vind])
+        else:
+            return None
+
+    def plan(self, pose_x, pose_y, pose_theta, lookahead_distance, vgain):
+        position = np.array([pose_x, pose_y])
+        lookahead_point = self._get_current_waypoint(self.waypoints, lookahead_distance, position, pose_theta)
+
+        if lookahead_point is None:
+            return 4.0, 0.0
+
+        speed, steering_angle = get_actuation(pose_theta, lookahead_point, position, lookahead_distance, self.wheelbase)
+        speed = vgain * speed
+
+        return speed, steering_angle
+
+
 class FrenetPlaner:
     """
     Frenet optimal trajectory generator
@@ -291,113 +355,6 @@ class FrenetPlaner:
 
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
-    def calc_control_points(self, vehicle_state, waypoints):
-        """
-        Calculate all the errors to trajectory frame + find desired curvature and heading
-        calc theta and ef
-        Theta is the heading of the car, this heading must be minimized
-        ef = crosstrack error/The distance from the optimal path/ lateral distance in frenet frame (front wheel)
-        """
-
-        ############# Calculate closest point to the front axle based on minimum distance calculation ################
-        # Calculate Position of the front axle of the vehicle based on current position
-        fx = vehicle_state[0] + self.wheelbase/2 * math.cos(vehicle_state[2])
-        fy = vehicle_state[1] + self.wheelbase/2 * math.sin(vehicle_state[2])
-        position_front_axle = np.array([fx, fy])
-
-        # Find target index for the correct waypoint by finding the index with the lowest distance value/hypothenuses
-        wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
-        nearest_point_front, nearest_dist, t, target_index = nearest_point_on_trajectory(position_front_axle, wpts)
-
-        # Calculate the Distances from the front axle to all the waypoints
-        distance_nearest_point_x= fx - nearest_point_front[0]
-        distance_nearest_point_y = fy - nearest_point_front[1]
-        vec_dist_nearest_point = np.array([distance_nearest_point_x, distance_nearest_point_y])
-
-        ###################  Calculate the current Cross-Track Error ef in [m]   ################
-        # Project crosstrack error onto front axle vector
-        front_axle_vec_rot_90 = np.array([[math.cos(vehicle_state[2] - math.pi / 2.0)],
-                                          [math.sin(vehicle_state[2] - math.pi / 2.0)]])
-
-        #vec_target_2_front = np.array([dx[target_index], dy[target_index]])
-
-        # Caculate the cross-track error ef by
-        ef = np.dot(vec_dist_nearest_point.T, front_axle_vec_rot_90)
-
-        #############  Calculate the heading error theta_e  normalized to an angle to [-pi, pi]     ##########
-        # Extract heading for the optimal raceline
-        # BE CAREFUL: If your raceline is based on a different coordinate system you need to -+ pi/2 = 90 degrees
-        theta_raceline = waypoints[target_index][3]
-
-        # Calculate the heading error by taking the difference between current and goal + Normalize the angles
-        theta_e = pi_2_pi(theta_raceline - vehicle_state[2])
-
-        # Calculate the target Veloctiy for the desired state
-        goal_veloctiy = waypoints[target_index][5]
-
-        #Find Reference curvature
-        kappa_ref = self.waypoints[target_index][4]
-
-        #Saving control errors
-        self.vehicle_control_e_cog = ef[0]
-        self.vehicle_control_theta_e = theta_e
-
-        return theta_e, ef[0], theta_raceline, kappa_ref, goal_veloctiy
-
-    def path_controller(self, vehicle_state, waypoints, vgain, timestep):
-        """
-        ComputeControlCommand calc lateral control command.
-        :param vehicle_state: vehicle state
-        :param ref_trajectory: reference trajectory (analyzer)f
-        :return: steering angle (optimal u), theta_e, e_cg
-        """
-
-        ##### Setup and initialize the LQR parameter
-        state_size = 4
-        matrix_q = [0.80, 0.0, 1.2, 0.0]
-        matrix_r = [1.0]
-        max_iteration = 150
-        eps = 0.001
-
-        # Saving lateral error and heading error from previous timestep
-        e_cog_old = self.vehicle_control_e_cog
-        theta_e_old = self.vehicle_control_theta_e
-
-        # Calculating current errors and reference points from reference trajectory
-        theta_e, e_cog, yaw_ref, k_ref, v_ref = self.calc_control_points(vehicle_state,waypoints)
-
-        #Update the calculation matrix based on the current vehicle state
-        matrix_ad_, matrix_bd_ = UpdateMatrix(vehicle_state, state_size,timestep,self.wheelbase)
-
-        ##################  Solving the LQR problem
-        matrix_r_ = np.diag(matrix_r)           # Extract the diagonal array from the R Matrix
-        matrix_q_ = np.diag(matrix_q)           # Extract the diagonal array from the Q Matrix
-
-        # Calculating the optimal gain matrix K, given a state-space model for the plant and weighting matrices Q, R
-        matrix_k_ = SolveLQRProblem(matrix_ad_, matrix_bd_, matrix_q_,
-                                         matrix_r_, eps, max_iteration)
-
-        # Create the state vector (4x1): x = [e_cog, dot_e_cog, theta_e, dot_theta_e]
-        matrix_state_ = np.zeros((state_size, 1))                    # Initialize State vectors
-        matrix_state_[0][0] = e_cog                                  # Current lateral distance e_cog to optimal path
-        matrix_state_[1][0] = (e_cog - e_cog_old) / timestep         # Derivative of e_cog
-        matrix_state_[2][0] = theta_e                                # Current heading difference to optimal path
-        matrix_state_[3][0] = (theta_e - theta_e_old) / timestep     # Derivative of theta_e
-
-        # Calculate feedback steering angle
-        # Input vector u = [delta], matrix_k * state ectors
-        steer_angle_feedback = (matrix_k_ @ matrix_state_)[0][0]
-
-        # Calculate feed forward control term to decrease the steady error
-        steer_angle_feedforward = k_ref * self.wheelbase
-
-        # Calculate final steering angle in [rad]
-        steer_angle = steer_angle_feedback + steer_angle_feedforward
-
-        # Calculate final speed control input in [m/s]:
-        speed = v_ref * vgain
-
-        return steer_angle, speed
 
     def check_collision(self, fp, ob):
         ROBOT_RADIUS = 0.5                  # robot radius [m]
@@ -415,7 +372,7 @@ class FrenetPlaner:
 
     def calc_frenet_paths(self, c_speed, c_d, c_d_d, c_d_dd, s0):
         # Parameter
-        MAX_ROAD_WIDTH = 1.1/2      # maximum road width [m]
+        MAX_ROAD_WIDTH = 1.1        # maximum road width [m]
         D_ROAD_W = 0.1              # road width sampling length [m]
         MAX_T = 5.0                 # max prediction time [m]
         MIN_T = 4.0                 # min prediction time [m]
@@ -569,7 +526,8 @@ class FrenetPlaner:
         path = self.path_planner(vehicle_state, self.waypoints, timestep, obstacles)
 
         # Calculate the steering angle and the speed in the controller
-        steering_angle, speed = self.path_controller(vehicle_state, self.waypoints, vgain, timestep)
+        steering_angle, speed = controller.plan()
+
 
         return speed,steering_angle
 
@@ -587,6 +545,7 @@ if __name__ == '__main__':
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = FrenetPlaner(conf, env, 0.17145 + 0.15875)
+    controller = PurePursuitPlanner(conf, 0.17145 + 0.15875)
 
     # Creating a Datalogger object that saves all necessary vehicle data
     logging = Datalogger(conf)
