@@ -201,6 +201,8 @@ if __name__ == '__main__':
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = StanleyPlanner(conf, 0.17145 + 0.15875)
+
+    # Creating a Datalogger object that saves all necessary vehicle data
     logging = Datalogger(conf)
 
     laptime = 0.0
@@ -213,6 +215,7 @@ if __name__ == '__main__':
         laptime += step_reward
         env.render(mode='human_fast')
 
+        #Loggin Statement: If True logging is done
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
 
