@@ -525,9 +525,20 @@ class FrenetPlaner:
         #Calculate the optimal path in the frenet frame
         path = self.path_planner(vehicle_state, self.waypoints, timestep, obstacles)
 
-        # Calculate the steering angle and the speed in the controller
-        steering_angle, speed = controller.plan()
 
+        ###########################################
+        ###########################################
+        plt.plot(self.waypoints[:,1],self.waypoints[:,2], linestyle ='solid',linewidth=2, color = '#005293')
+        plt.plot(path.x, path.y, linestyle ='dashed',linewidth=2, color = '#e37222', label = 'Raceline Path')
+        plt.axis('equal')
+
+        ###########################################
+        ###########################################
+
+        # Calculate the steering angle and the speed in the controller
+        # steering_angle, speed = controller.plan()
+        steering_angle = 0
+        speed = 5
 
         return speed,steering_angle
 
