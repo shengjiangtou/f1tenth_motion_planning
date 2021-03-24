@@ -1,5 +1,6 @@
 # metadata
 run_name: 'map_wide'
+logging: 'True'
 # characteristic number for map
 perf_num: 6
 
@@ -8,9 +9,9 @@ map_path: './SaoPaulo_map'
 map_ext: '.png'
 
 # starting pose for map
-sx: -0.8157367
-sy: -0.1041683
-stheta: 4.9585821
+sx: -0.81
+sy: -0.10
+stheta: 4.96
 
 sx2: 1.3079426
 sy2: -0.4869018
