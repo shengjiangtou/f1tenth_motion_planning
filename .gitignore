@@ -128,9 +128,11 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# MacOS and Pycharm Stuff
-.idea
+# OS generated files #
+######################
 .DS_Store
+.DS_Store?
+.idea
 
 #Data files
 .p
