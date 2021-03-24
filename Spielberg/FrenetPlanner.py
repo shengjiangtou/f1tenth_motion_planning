@@ -8,6 +8,7 @@ from numba import njit
 import matplotlib.pyplot as plt
 import pickle
 import copy
+import cubic_spline_planner
 
 """ 
 Planner Helpers
@@ -398,6 +399,20 @@ class FrenetPlaner:
 
         return steer_angle, speed
 
+    def check_collision(self, fp, ob):
+        ROBOT_RADIUS = 0.5                  # robot radius [m]
+
+        for i in range(len(ob[:, 0])):
+            d = [((ix - ob[i, 0]) ** 2 + (iy - ob[i, 1]) ** 2)
+                 for (ix, iy) in zip(fp.x, fp.y)]
+
+            collision = any([di <= ROBOT_RADIUS ** 2 for di in d])
+
+            if collision:
+                return False
+
+        return True
+
     def calc_frenet_paths(self, c_speed, c_d, c_d_d, c_d_dd, s0):
         # Parameter
         MAX_ROAD_WIDTH = 1.1/2      # maximum road width [m]
@@ -490,12 +505,32 @@ class FrenetPlaner:
 
         return fplist
 
-    def check_paths(self, speed, c_d, c_d_d, c_d_dd, s0):
-        path = 0
+    def check_paths(self, fplist,ob):
+        MAX_SPEED = 20.0                    # maximum speed [m/s]
+        MAX_ACCEL = 8.0                     # maximum acceleration [m/ss]
+        MAX_CURVATURE = 1.0                 # maximum curvature [1/m]
 
-        return path
+        ok_ind = []
+        for i, _ in enumerate(fplist):
+            if any([v > MAX_SPEED for v in fplist[i].s_d]):  # Max speed check
+                continue
+            elif any([abs(a) > MAX_ACCEL for a in
+                      fplist[i].s_dd]):  # Max accel check
+                continue
+            elif any([abs(c) > MAX_CURVATURE for c in
+                      fplist[i].c]):  # Max curvature check
+                continue
+            elif not self.check_collision(fplist[i], ob):
+                continue
 
-    def path_planner(self, vehicle_state, waypoints, timestep):
+            ok_ind.append(i)
+
+        return [fplist[i] for i in ok_ind]
+
+    def path_planner(self, vehicle_state, waypoints, timestep, obstacles):
+
+        #Calculate the cubic spline of the raceline path and create csp object
+        csp = cubic_spline_planner.Spline2D(self.waypoints[:,1], self.waypoints[:,2])
 
         #Calculate the optimal path in the frenet frame
         fplist = self.calc_frenet_paths(vehicle_state[3], self.c_d, self.c_d_d, self.c_d_dd, self.s0)
@@ -504,7 +539,7 @@ class FrenetPlaner:
         fplist = self.calc_global_paths(fplist, csp)
 
         # Check if the obstacles are in the way of the path
-        fplist = self.check_paths(fplist, ob)
+        #fplist = self.check_paths(fplist, obstacles)
 
         # find minimum cost path
         min_cost = float("inf")
@@ -516,17 +551,25 @@ class FrenetPlaner:
 
         best_path
 
+        self.s0 = best_path.s[1]
+        self.c_d = best_path.d[1]
+        self.c_d_d = best_path.d_d[1]
+        self.c_d_dd = best_path.d_dd[1]
+
         return best_path
 
     def plan(self, pose_x, pose_y, pose_theta, velocity, vgain, timestep):
         #Define a numpy array that includes the current vehicle state: x,y, theta, veloctiy
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
+        #Detect Obstacles on the track
+        obstacles = np.array([[20.0, 10.0],[30.0, 6.0]])
+
         #Calculate the optimal path in the frenet frame
-        path = self.path_planner(vehicle_state, self.waypoints, timestep)
+        path = self.path_planner(vehicle_state, self.waypoints, timestep, obstacles)
 
         # Calculate the steering angle and the speed in the controller
-        steering_angle, speed = self.controller(vehicle_state, self.waypoints, vgain, timestep)
+        steering_angle, speed = self.path_controller(vehicle_state, self.waypoints, vgain, timestep)
 
         return speed,steering_angle
 
