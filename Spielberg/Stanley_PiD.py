@@ -68,10 +68,8 @@ class StanleyPlanner:
         self.conf = conf                    # Current configuration for the gym based on the maps
         self.load_waypoints(conf)           # Waypoints of the raceline
         self.max_reacquire = 20.
-        self.stopthecount = 0
-        self.heading = []
-        self.heading_raceline = []
-        self.heading_error = []
+        self.vehicle_control_e_f = 0        # Control error
+        self.vehicle_control_error3 = 0
 
     def load_waypoints(self, conf):
         """
@@ -80,7 +78,7 @@ class StanleyPlanner:
 
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
-    def calc_theta_and_ef(self, vehicle_state, waypoints,lap):
+    def calc_theta_and_ef(self, vehicle_state, waypoints):
         """
         calc theta and ef
         Theta is the heading of the car, this heading must be minimized
@@ -113,7 +111,7 @@ class StanleyPlanner:
         ef = np.dot(vec_dist_nearest_point.T, front_axle_vec_rot_90)
 
         #############  Calculate the heading error theta_e  normalized to an angle to [-pi, pi]     ##########
-        # Extract heading on the raceline
+        # Extract heading for the optimal raceline
         # BE CAREFUL: If your raceline is based on a different coordinate system you need to -+ pi/2 = 90 degrees
         theta_raceline = waypoints[target_index][3]
 
@@ -125,19 +123,25 @@ class StanleyPlanner:
 
         return theta_e, ef, target_index, goal_veloctiy
 
-    def controller(self, vehicle_state, waypoints, vgain,lap):
+    def controller(self, vehicle_state, waypoints, vgain):
         """
         Front Wheel Feedback Controller to track the path
         Based on the heading error theta_e and the crosstrack error ef we calculate the steering angle
         Returns the optimal steering angle delta is P-Controller with the proportional gain k
         """
 
-        k_path = 6.33010407                # Proportional gain for path control
+        k_path = 12.2                 # Proportional gain for path control
+        kd = 1.45                    # Integral gain
+        ki = 0.5
         k_veloctiy = vgain           # Proportional gain for speed control, defined globally in the gym
-        theta_e, ef, target_index, goal_veloctiy = self.calc_theta_and_ef(vehicle_state, waypoints, lap)
+        theta_e, ef, target_index, goal_veloctiy = self.calc_theta_and_ef(vehicle_state, waypoints)
 
         # Caculate steering angle based on the cross track error to the front axle in [rad]
-        cte_front = math.atan2(k_path * ef, vehicle_state[3])
+        error1 = (k_path * ef[0])
+        error2 = (kd * (ef[0] - self.vehicle_control_e_f)/0.01)
+        error3 = self.vehicle_control_error3 + (ki*ef[0]*0.01)
+        error = error1 + error2 + error3
+        cte_front = math.atan2(error, vehicle_state[3])
 
         # Calculate final steering angle/ control input in [rad]: Steering Angle based on error + heading error
         delta = cte_front + theta_e
@@ -146,14 +150,17 @@ class StanleyPlanner:
         #speed_diff = k_veloctiy * (goal_veloctiy-velocity)
         speed = k_veloctiy * goal_veloctiy
 
+        self.vehicle_control_e_f = ef
+        self.vehicle_control_error3 = error3
+
         return delta, speed
 
-    def plan(self, pose_x, pose_y, pose_theta, velocity, vgain, lap):
+    def plan(self, pose_x, pose_y, pose_theta, velocity, vgain):
         #Define a numpy array that includes the current vehicle state: x,y, theta, veloctiy
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
         #Calculate the steering angle and the speed in the controller
-        steering_angle, speed = self.controller(vehicle_state, self.waypoints, vgain,lap)
+        steering_angle, speed = self.controller(vehicle_state, self.waypoints, vgain)
 
         return speed,steering_angle
 
@@ -190,7 +197,7 @@ class Datalogger:
 
 if __name__ == '__main__':
 
-    work = {'mass': 3.97611187, 'lf': 0.16934925, 'tlad': 0.82461887897713965, 'vgain': 0.90439957}
+    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 1.00}
     with open('config_Spielberg_map.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
@@ -209,13 +216,12 @@ if __name__ == '__main__':
     start = time.time()
 
     while not done:
-        speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], work['vgain'], obs['lap_counts'])
+        speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], work['vgain'])
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
         env.render(mode='human_fast')
 
-        #Loggin Statement: If True logging is done
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
 
