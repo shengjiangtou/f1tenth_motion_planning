@@ -290,9 +290,11 @@ class PurePursuitPlanner:
         # Loading the x and y waypoints in the "..._raceline.vsv" that include the path to follow
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
-    def _get_current_waypoint(self, waypoints, lookahead_distance, position, theta):
+    def _get_current_waypoint(self, waypoints, lookahead_distance, position, theta, path):
         # Find the current waypoint on the map and calculate the lookahead point for the controller
         wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
+        wpts2 = np.vstack(path.x,path.y)
+
         nearest_point, nearest_dist, t, i = nearest_point_on_trajectory(position, wpts)
         if nearest_dist < lookahead_distance:
             lookahead_point, i2, t2 = first_point_on_trajectory_intersecting_circle(position, lookahead_distance, wpts, i+t, wrap=True)
@@ -309,9 +311,9 @@ class PurePursuitPlanner:
         else:
             return None
 
-    def plan(self, pose_x, pose_y, pose_theta, lookahead_distance, vgain):
+    def plan(self, pose_x, pose_y, pose_theta, lookahead_distance, vgain, path):
         position = np.array([pose_x, pose_y])
-        lookahead_point = self._get_current_waypoint(self.waypoints, lookahead_distance, position, pose_theta)
+        lookahead_point = self._get_current_waypoint(self.waypoints, lookahead_distance, position, pose_theta, path)
 
         if lookahead_point is None:
             return 4.0, 0.0
@@ -536,9 +538,11 @@ class FrenetPlaner:
         path = self.path_planner(vehicle_state, self.waypoints, timestep, obstacles)
 
         # Calculate the steering angle and the speed in the controller
-        # steering_angle, speed = controller.plan()
-        steering_angle = 0
-        speed = 5
+        lookahead_distance = 0.8
+        vgain = 0.8
+        steering_angle, speed = controller.plan(pose_x, pose_y, pose_theta, lookahead_distance, vgain, path)
+        #steering_angle = 0
+        #speed = 5
 
         return speed,steering_angle
 
