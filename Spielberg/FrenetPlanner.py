@@ -343,7 +343,7 @@ class FrenetPlaner:
         self.max_reacquire = 20.
         self.vehicle_control_e_cog = 0       # e_cg: lateral error of CoG to ref trajectory
         self.vehicle_control_theta_e = 0     # theta_e: yaw error to ref trajectory
-        self.c_d = 2.0                      # current lateral position [m]
+        self.c_d = 0.0                      # current lateral position [m]
         self.c_d_d = 0.0                    # current lateral speed [m/s]
         self.c_d_dd = 0.0                   # current lateral acceleration [m/s]
         self.s0 = 0.0                       # current course position
@@ -373,18 +373,18 @@ class FrenetPlaner:
     def calc_frenet_paths(self, c_speed, c_d, c_d_d, c_d_dd, s0):
         # Parameter
         MAX_ROAD_WIDTH = 1.1        # maximum road width [m]
-        D_ROAD_W = 0.1              # road width sampling length [m]
-        MAX_T = 5.0                 # max prediction time [m]
-        MIN_T = 4.0                 # min prediction time [m]
-        DT = 0.1                    # Sampling time in s
+        D_ROAD_W = 0.75             # road width sampling length [m]
+        MAX_T = 4.0                 # max prediction time [m]
+        MIN_T = 3.0                 # min prediction time [m]
+        DT = 0.2                    # Sampling time in s
         TARGET_SPEED = 8.0          # Target speed in [m/s]
         D_T_S = 1.0                 # target speed sampling length [m/s]
-        N_S_SAMPLE = 4              # sampling number of target speed
+        N_S_SAMPLE = 1              # sampling number of target speed
 
         # cost weights
-        K_J = 0.1
-        K_T = 0.1
-        K_D = 1.0
+        K_J = 0.1                   # Weights for Jerk
+        K_T = 0.1                   # Weights for Time
+        K_D = 1.0                   # Weights for
         K_LAT = 1.0
         K_LON = 1.0
 
@@ -463,7 +463,7 @@ class FrenetPlaner:
         return fplist
 
     def check_paths(self, fplist,ob):
-        MAX_SPEED = 20.0                    # maximum speed [m/s]
+        MAX_SPEED = 12.0                    # maximum speed [m/s]
         MAX_ACCEL = 8.0                     # maximum acceleration [m/ss]
         MAX_CURVATURE = 1.0                 # maximum curvature [1/m]
 
@@ -513,6 +513,16 @@ class FrenetPlaner:
         self.c_d_d = best_path.d_d[1]
         self.c_d_dd = best_path.d_dd[1]
 
+        ###########################################
+        ###########################################
+        plt.plot(self.waypoints[:,1],self.waypoints[:,2], linestyle ='solid',linewidth=2, color = '#005293')
+        plt.plot(best_path.x, best_path.y, linestyle ='dashed',linewidth=2, color = '#e37222', label = 'Raceline Path')
+        plt.axis('equal')
+        plt.show()
+
+        ###########################################
+        ###########################################
+
         return best_path
 
     def plan(self, pose_x, pose_y, pose_theta, velocity, vgain, timestep):
@@ -524,16 +534,6 @@ class FrenetPlaner:
 
         #Calculate the optimal path in the frenet frame
         path = self.path_planner(vehicle_state, self.waypoints, timestep, obstacles)
-
-
-        ###########################################
-        ###########################################
-        plt.plot(self.waypoints[:,1],self.waypoints[:,2], linestyle ='solid',linewidth=2, color = '#005293')
-        plt.plot(path.x, path.y, linestyle ='dashed',linewidth=2, color = '#e37222', label = 'Raceline Path')
-        plt.axis('equal')
-
-        ###########################################
-        ###########################################
 
         # Calculate the steering angle and the speed in the controller
         # steering_angle, speed = controller.plan()
