@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import pickle
 import copy
 import cubic_spline_planner
+import trajectory_planning_helpers.path_matching_local as tph
 
 """ 
 Planner Helpers
@@ -210,6 +211,7 @@ class QuarticPolynomial:
 
         return xt
 
+
 class QuinticPolynomial:
 
     def __init__(self, xs, vxs, axs, xe, vxe, axe, time):
@@ -292,8 +294,11 @@ class PurePursuitPlanner:
 
     def _get_current_waypoint(self, waypoints, lookahead_distance, position, theta, path):
         # Find the current waypoint on the map and calculate the lookahead point for the controller
-        wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
-        wpts2 = np.vstack(path.x,path.y)
+        # wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
+
+        # Create waypoints based on the current path
+        wpts = np.vstack((np.array(path.x), np.array(path.y))).T
+
 
         nearest_point, nearest_dist, t, i = nearest_point_on_trajectory(position, wpts)
         if nearest_dist < lookahead_distance:
@@ -343,12 +348,12 @@ class FrenetPlaner:
         self.env = env                     # Current environment parameter
         self.load_waypoints(conf)           # Waypoints of the raceline
         self.max_reacquire = 20.
-        self.vehicle_control_e_cog = 0       # e_cg: lateral error of CoG to ref trajectory
-        self.vehicle_control_theta_e = 0     # theta_e: yaw error to ref trajectory
-        self.c_d = 0.0                      # current lateral position [m]
-        self.c_d_d = 0.0                    # current lateral speed [m/s]
-        self.c_d_dd = 0.0                   # current lateral acceleration [m/s]
-        self.s0 = 0.0                       # current course position
+        self.c_d = 0.0                      # current lateral position in the Frenet Frame [m]
+        self.c_d_d = 0.0                    # current lateral speed in the Frenet Frame [m/s]
+        self.c_d_dd = 0.0                   # current lateral acceleration in the Frenet Frame [m/s]
+        self.s0 = 0.0                       # current course position s in the Frenet Frame
+        self.calcspline = 0
+        self.csp = 0
 
     def load_waypoints(self, conf):
         """
@@ -372,10 +377,32 @@ class FrenetPlaner:
 
         return True
 
+    def check_paths(self, fplist,ob):
+        MAX_SPEED = 12.0                    # maximum speed [m/s]
+        MAX_ACCEL = 8.0                     # maximum acceleration [m/ss]
+        MAX_CURVATURE = 1.0                 # maximum curvature [1/m]
+
+        ok_ind = []
+        for i, _ in enumerate(fplist):
+            if any([v > MAX_SPEED for v in fplist[i].s_d]):  # Max speed check
+                continue
+            elif any([abs(a) > MAX_ACCEL for a in
+                      fplist[i].s_dd]):  # Max accel check
+                continue
+            elif any([abs(c) > MAX_CURVATURE for c in
+                      fplist[i].c]):  # Max curvature check
+                continue
+            elif not self.check_collision(fplist[i], ob):
+                continue
+
+            ok_ind.append(i)
+
+        return [fplist[i] for i in ok_ind]
+
     def calc_frenet_paths(self, c_speed, c_d, c_d_d, c_d_dd, s0):
         # Parameter
-        MAX_ROAD_WIDTH = 1.1        # maximum road width [m]
-        D_ROAD_W = 0.75             # road width sampling length [m]
+        MAX_ROAD_WIDTH = 0.75        # maximum road width [m]
+        D_ROAD_W = 0.10             # road width sampling length [m]
         MAX_T = 4.0                 # max prediction time [m]
         MIN_T = 3.0                 # min prediction time [m]
         DT = 0.2                    # Sampling time in s
@@ -433,9 +460,9 @@ class FrenetPlaner:
 
         return frenet_paths
 
-    def calc_global_paths(self, fplist, csp):
+    def calc_global_paths(self, fplist, csp, vehicle_state):
         for fp in fplist:
-
+            test = fp
             # calc global positions
             for i in range(len(fp.s)):
                 ix, iy = csp.calc_position(fp.s[i])
@@ -464,40 +491,20 @@ class FrenetPlaner:
 
         return fplist
 
-    def check_paths(self, fplist,ob):
-        MAX_SPEED = 12.0                    # maximum speed [m/s]
-        MAX_ACCEL = 8.0                     # maximum acceleration [m/ss]
-        MAX_CURVATURE = 1.0                 # maximum curvature [1/m]
-
-        ok_ind = []
-        for i, _ in enumerate(fplist):
-            if any([v > MAX_SPEED for v in fplist[i].s_d]):  # Max speed check
-                continue
-            elif any([abs(a) > MAX_ACCEL for a in
-                      fplist[i].s_dd]):  # Max accel check
-                continue
-            elif any([abs(c) > MAX_CURVATURE for c in
-                      fplist[i].c]):  # Max curvature check
-                continue
-            elif not self.check_collision(fplist[i], ob):
-                continue
-
-            ok_ind.append(i)
-
-        return [fplist[i] for i in ok_ind]
-
     def path_planner(self, vehicle_state, waypoints, timestep, obstacles):
 
-        #Calculate the cubic spline of the raceline path and create csp object
-        csp = cubic_spline_planner.Spline2D(self.waypoints[:,1], self.waypoints[:,2])
+        # Calculate the cubic spline of the raceline path and create csp object - create it once!
+        if self.calcspline == 0:
+            self.csp = cubic_spline_planner.Spline2D(self.waypoints[:,1], self.waypoints[:,2])
+            self.calcspline = 1
 
-        #Calculate the optimal path in the frenet frame
+        # Calculate the optimal paths in the frenet frame
         fplist = self.calc_frenet_paths(vehicle_state[3], self.c_d, self.c_d_d, self.c_d_dd, self.s0)
 
-        # Calculate the global path based on the waypoints
-        fplist = self.calc_global_paths(fplist, csp)
+        # Calculate the one optimal path based on the global path (raceline)
+        fplist = self.calc_global_paths(fplist, self.csp, vehicle_state)
 
-        # Check if the obstacles are in the way of the path
+        # Check if there are obstacles in the way of the path
         #fplist = self.check_paths(fplist, obstacles)
 
         # find minimum cost path
@@ -510,39 +517,33 @@ class FrenetPlaner:
 
         best_path
 
-        self.s0 = best_path.s[1]
-        self.c_d = best_path.d[1]
+        ############# Check current position
+        traj = np.stack((np.array(best_path.s), np.array(best_path.x), np.array(best_path.y)), axis=-1)
+        state = np.stack((vehicle_state[0],vehicle_state[1]), axis=0)
+        s_current, d_current = tph.path_matching_local(traj,state)
+
+        print("S_from_Path: %.4f , D_from_Path %.4f" % (s_current, d_current))
+        self.s0 = s_current
+        self.c_d = d_current
         self.c_d_d = best_path.d_d[1]
         self.c_d_dd = best_path.d_dd[1]
-
-        ###########################################
-        ###########################################
-        plt.plot(self.waypoints[:,1],self.waypoints[:,2], linestyle ='solid',linewidth=2, color = '#005293')
-        plt.plot(best_path.x, best_path.y, linestyle ='dashed',linewidth=2, color = '#e37222', label = 'Raceline Path')
-        plt.axis('equal')
-        plt.show()
-
-        ###########################################
-        ###########################################
 
         return best_path
 
     def plan(self, pose_x, pose_y, pose_theta, velocity, vgain, timestep):
-        #Define a numpy array that includes the current vehicle state: x,y, theta, veloctiy
+        # Define a numpy array that includes the current vehicle state: x-position,y-position, theta, veloctiy
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
-        #Detect Obstacles on the track
+        # Detect Obstacles on the track
         obstacles = np.array([[20.0, 10.0],[30.0, 6.0]])
 
-        #Calculate the optimal path in the frenet frame
+        # Calculate the optimal path in the frenet frame
         path = self.path_planner(vehicle_state, self.waypoints, timestep, obstacles)
 
         # Calculate the steering angle and the speed in the controller
-        lookahead_distance = 0.8
-        vgain = 0.8
-        steering_angle, speed = controller.plan(pose_x, pose_y, pose_theta, lookahead_distance, vgain, path)
-        #steering_angle = 0
-        #speed = 5
+        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.8, 0.8, path)
+
+        print("Steering Angle: %.4f , Speed: %.4f" % (steering_angle,speed))
 
         return speed,steering_angle
 
