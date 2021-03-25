@@ -10,6 +10,7 @@ import pickle
 import copy
 import cubic_spline_planner
 import trajectory_planning_helpers.path_matching_local as tph
+import trajectory_planning_helpers.path_matching_global as tph
 
 """ 
 Planner Helpers
@@ -491,7 +492,7 @@ class FrenetPlaner:
 
         return fplist
 
-    def path_planner(self, vehicle_state, waypoints, timestep, obstacles):
+    def path_planner(self, vehicle_state,  obstacles):
 
         # Calculate the cubic spline of the raceline path and create csp object - create it once!
         if self.calcspline == 0:
@@ -501,7 +502,7 @@ class FrenetPlaner:
         # Calculate the optimal paths in the frenet frame
         fplist = self.calc_frenet_paths(vehicle_state[3], self.c_d, self.c_d_d, self.c_d_dd, self.s0)
 
-        # Calculate the one optimal path based on the global path (raceline)
+        # Calculate the one optimal path based closest to the global path (raceline)
         fplist = self.calc_global_paths(fplist, self.csp, vehicle_state)
 
         # Check if there are obstacles in the way of the path
@@ -518,15 +519,32 @@ class FrenetPlaner:
         best_path
 
         ############# Check current position
-        traj = np.stack((np.array(best_path.s), np.array(best_path.x), np.array(best_path.y)), axis=-1)
-        state = np.stack((vehicle_state[0],vehicle_state[1]), axis=0)
-        s_current, d_current = tph.path_matching_local(traj,state)
-
+        state = np.stack((vehicle_state[0], vehicle_state[1]), axis=0)
+        #traj = np.stack((np.array(best_path.s), np.array(best_path.x), np.array(best_path.y)), axis=-1)
+        #s_current, d_current = tph.path_matching_local(traj,state)
+        traj = np.stack((self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]), axis=-1)
+        s_current, d_current = tph.path_matching_global(traj,state)
         print("S_from_Path: %.4f , D_from_Path %.4f" % (s_current, d_current))
+
+        # Update Vehicle Parameter
         self.s0 = s_current
         self.c_d = d_current
         self.c_d_d = best_path.d_d[1]
         self.c_d_dd = best_path.d_dd[1]
+
+        ###########################################
+        ###########################################
+        plt.figure(1)
+        plt.plot(self.waypoints[:, 1], self.waypoints[:, 2], linestyle='solid', linewidth=2, color='#005293')
+        plt.plot(vehicle_state[0], vehicle_state[1], marker='o', color='red')
+        for fp in fplist:
+            plt.plot(fp.x, fp.y, linestyle='dashed', linewidth=2, color='#e37222',)
+        plt.plot(best_path.x, best_path.y, color='g', linestyle='dotted', linewidth=6)
+        plt.axis('equal')
+        plt.close()
+
+        ###########################################
+        ###########################################
 
         return best_path
 
@@ -538,7 +556,7 @@ class FrenetPlaner:
         obstacles = np.array([[20.0, 10.0],[30.0, 6.0]])
 
         # Calculate the optimal path in the frenet frame
-        path = self.path_planner(vehicle_state, self.waypoints, timestep, obstacles)
+        path = self.path_planner(vehicle_state, obstacles)
 
         # Calculate the steering angle and the speed in the controller
         speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.8, 0.8, path)
