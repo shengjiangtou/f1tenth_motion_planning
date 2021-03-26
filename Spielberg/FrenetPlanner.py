@@ -297,7 +297,7 @@ class PurePursuitPlanner:
         # Find the current waypoint on the map and calculate the lookahead point for the controller
         # wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
 
-        # Create waypoints based on the current path
+        # Create waypoints based on the current frenet path
         wpts = np.vstack((np.array(path.x), np.array(path.y))).T
 
 
@@ -355,6 +355,11 @@ class FrenetPlaner:
         self.s0 = 0.0                       # current course position s in the Frenet Frame
         self.calcspline = 0
         self.csp = 0
+        self.debug_count = 0                # DEBUG - Counts
+        self.debug_array1 = []              # DEBUG - array for saving numbers
+        self.debug_array2 = []              # DEBUG - array for saving numbers
+        self.debug_array3 = []  # DEBUG - array for saving numbers
+        self.debug_array4 = []  # DEBUG - array for saving numbers
 
     def load_waypoints(self, conf):
         """
@@ -402,10 +407,10 @@ class FrenetPlaner:
 
     def calc_frenet_paths(self, c_speed, c_d, c_d_d, c_d_dd, s0):
         # Parameter
-        MAX_ROAD_WIDTH = 0.75        # maximum road width [m]
-        D_ROAD_W = 0.10             # road width sampling length [m]
-        MAX_T = 4.0                 # max prediction time [m]
-        MIN_T = 3.0                 # min prediction time [m]
+        MAX_ROAD_WIDTH = 0.7       # maximum road width [m]
+        D_ROAD_W = 0.05             # road width sampling length [m]
+        MAX_T = 3.0                 # max prediction time [m]
+        MIN_T = 1.0                 # min prediction time [m]
         DT = 0.2                    # Sampling time in s
         TARGET_SPEED = 8.0          # Target speed in [m/s]
         D_T_S = 1.0                 # target speed sampling length [m/s]
@@ -414,7 +419,7 @@ class FrenetPlaner:
         # cost weights
         K_J = 0.1                   # Weights for Jerk
         K_T = 0.1                   # Weights for Time
-        K_D = 1.0                   # Weights for
+        K_D = 100.0                   # Weights for
         K_LAT = 1.0
         K_LON = 1.0
 
@@ -467,14 +472,16 @@ class FrenetPlaner:
             # calc global positions
             for i in range(len(fp.s)):
                 ix, iy = csp.calc_position(fp.s[i])
+
                 if ix is None:
                     break
                 i_yaw = csp.calc_yaw(fp.s[i])
                 di = fp.d[i]
-                fx = ix + di * math.cos(i_yaw + math.pi / 2.0)
-                fy = iy + di * math.sin(i_yaw + math.pi / 2.0)
+                fx = ix - di * math.cos(i_yaw + math.pi / 2.0)
+                fy = iy - di * math.sin(i_yaw + math.pi / 2.0)
                 fp.x.append(fx)
                 fp.y.append(fy)
+
 
             # calc yaw and ds
             for i in range(len(fp.x) - 1):
@@ -499,6 +506,16 @@ class FrenetPlaner:
             self.csp = cubic_spline_planner.Spline2D(self.waypoints[:,1], self.waypoints[:,2])
             self.calcspline = 1
 
+        # Get current position S and distance d to the global raceline
+        state = np.stack((vehicle_state[0], vehicle_state[1]), axis=0)
+        traj = np.stack((self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]), axis=-1)
+        s_current, d_current = tph.path_matching_global(traj,state)
+        #print("S_from_Path: %.4f , D_from_Path %.4f" % (s_current, d_current))
+
+        # Update Vehicle Parameter
+        self.s0 = s_current
+        self.c_d = d_current
+
         # Calculate the optimal paths in the frenet frame
         fplist = self.calc_frenet_paths(vehicle_state[3], self.c_d, self.c_d_d, self.c_d_dd, self.s0)
 
@@ -518,32 +535,36 @@ class FrenetPlaner:
 
         best_path
 
-        ############# Check current position
-        state = np.stack((vehicle_state[0], vehicle_state[1]), axis=0)
-        #traj = np.stack((np.array(best_path.s), np.array(best_path.x), np.array(best_path.y)), axis=-1)
-        #s_current, d_current = tph.path_matching_local(traj,state)
-        traj = np.stack((self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]), axis=-1)
-        s_current, d_current = tph.path_matching_global(traj,state)
-        print("S_from_Path: %.4f , D_from_Path %.4f" % (s_current, d_current))
-
-        # Update Vehicle Parameter
-        self.s0 = s_current
-        self.c_d = d_current
         self.c_d_d = best_path.d_d[1]
         self.c_d_dd = best_path.d_dd[1]
 
-        ###########################################
-        ###########################################
-        plt.figure(1)
-        plt.plot(self.waypoints[:, 1], self.waypoints[:, 2], linestyle='solid', linewidth=2, color='#005293')
-        plt.plot(vehicle_state[0], vehicle_state[1], marker='o', color='red')
-        for fp in fplist:
-            plt.plot(fp.x, fp.y, linestyle='dashed', linewidth=2, color='#e37222',)
-        plt.plot(best_path.x, best_path.y, color='g', linestyle='dotted', linewidth=6)
-        plt.axis('equal')
-        plt.close()
 
         ###########################################
+        #                    DEBUG
+        ##########################################
+
+        debug = 1
+        self.debug_count = self.debug_count + 1
+        print(self.debug_count)
+        self.debug_array1.append(fp.yaw[0])
+        self.debug_array2.append(vehicle_state[2])
+        if self.debug_count == 100:
+            plt.cla()
+            plt.plot(self.debug_array1, linestyle='solid', linewidth=2, color='#005293')
+            plt.plot(self.debug_array2, linestyle='dashed', linewidth=2, color='#e37222')
+            debug = 1
+
+        if debug ==1:
+            plt.cla()
+            plt.plot(self.waypoints[:, 1], self.waypoints[:, 2], linestyle='solid', linewidth=2, color='#005293')
+            plt.plot(vehicle_state[0], vehicle_state[1], marker='o', color='red')
+            for fp in fplist:
+                plt.plot(fp.x, fp.y, linestyle='dashed', linewidth=2, color='#e37222')
+            plt.plot(best_path.x, best_path.y, color='g', linestyle='dotted', linewidth=6)
+            plt.axis('equal')
+
+        ###########################################
+        #                    DEBUG
         ###########################################
 
         return best_path
@@ -559,9 +580,8 @@ class FrenetPlaner:
         path = self.path_planner(vehicle_state, obstacles)
 
         # Calculate the steering angle and the speed in the controller
-        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.8, 0.8, path)
+        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 1.0, 0.8, path)
 
-        print("Steering Angle: %.4f , Speed: %.4f" % (steering_angle,speed))
 
         return speed,steering_angle
 

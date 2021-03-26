@@ -8,9 +8,9 @@ perf_num: 6
 map_path: './Spielberg_map'
 map_ext: '.png'
 
-# starting pose for map
-sx: -0.0440806
-sy: -0.8491629
+# starting pose for map sy: -0.8491629 sx: -0.0440806
+sx: -1.0440806
+sy: -0.7491629
 stheta: 3.4
 
 sx2: 1.3079426
