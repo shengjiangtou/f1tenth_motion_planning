@@ -293,13 +293,12 @@ class PurePursuitPlanner:
         # Loading the x and y waypoints in the "..._raceline.vsv" that include the path to follow
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
-    def _get_current_waypoint(self, waypoints, lookahead_distance, position, theta, path):
+    def _get_current_waypoint(self, waypoints, lookahead_distance, position, path):
         # Find the current waypoint on the map and calculate the lookahead point for the controller
         # wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
 
         # Create waypoints based on the current frenet path
         wpts = np.vstack((np.array(path.x), np.array(path.y))).T
-
 
         nearest_point, nearest_dist, t, i = nearest_point_on_trajectory(position, wpts)
         if nearest_dist < lookahead_distance:
@@ -319,7 +318,7 @@ class PurePursuitPlanner:
 
     def plan(self, pose_x, pose_y, pose_theta, lookahead_distance, vgain, path):
         position = np.array([pose_x, pose_y])
-        lookahead_point = self._get_current_waypoint(self.waypoints, lookahead_distance, position, pose_theta, path)
+        lookahead_point = self._get_current_waypoint(self.waypoints, lookahead_distance, position, path)
 
         if lookahead_point is None:
             return 4.0, 0.0
@@ -543,25 +542,7 @@ class FrenetPlaner:
         #                    DEBUG
         ##########################################
 
-        debug = 1
-        self.debug_count = self.debug_count + 1
-        print(self.debug_count)
-        self.debug_array1.append(fp.yaw[0])
-        self.debug_array2.append(vehicle_state[2])
-        if self.debug_count == 100:
-            plt.cla()
-            plt.plot(self.debug_array1, linestyle='solid', linewidth=2, color='#005293')
-            plt.plot(self.debug_array2, linestyle='dashed', linewidth=2, color='#e37222')
-            debug = 1
 
-        if debug ==1:
-            plt.cla()
-            plt.plot(self.waypoints[:, 1], self.waypoints[:, 2], linestyle='solid', linewidth=2, color='#005293')
-            plt.plot(vehicle_state[0], vehicle_state[1], marker='o', color='red')
-            for fp in fplist:
-                plt.plot(fp.x, fp.y, linestyle='dashed', linewidth=2, color='#e37222')
-            plt.plot(best_path.x, best_path.y, color='g', linestyle='dotted', linewidth=6)
-            plt.axis('equal')
 
         ###########################################
         #                    DEBUG
@@ -580,8 +561,8 @@ class FrenetPlaner:
         path = self.path_planner(vehicle_state, obstacles)
 
         # Calculate the steering angle and the speed in the controller
-        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 1.0, 0.8, path)
-
+        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.8
+                                                , 0.5, path)
 
         return speed,steering_angle
 
