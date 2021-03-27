@@ -536,7 +536,7 @@ class FrenetPlaner:
         #                    DEBUG
         ##########################################
 
-        debugplot=1
+        debugplot=0
         if debugplot == 1:
             plt.cla()
             plt.axis([-40, 2, -10, 10])
@@ -581,7 +581,7 @@ if __name__ == '__main__':
 
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
-    #env.render()
+    env.render()
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = FrenetPlaner(conf, env, 0.17145 + 0.15875)
@@ -598,7 +598,7 @@ if __name__ == '__main__':
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        #env.render(mode='human_fast')
+        env.render(mode='human_fast')
 
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
