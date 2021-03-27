@@ -406,8 +406,8 @@ class FrenetPlaner:
 
     def calc_frenet_paths(self, c_speed, c_d, c_d_d, c_d_dd, s0):
         # Parameter
-        MAX_ROAD_WIDTH = 0.75       # maximum road width [m]
-        D_ROAD_W = 0.20             # road width sampling length [m]
+        MAX_ROAD_WIDTH = 1.00       # maximum road width [m]
+        D_ROAD_W = 0.50            # road width sampling length [m]
         MAX_T = 1.5                 # max prediction time [m]
         MIN_T = 0.5                 # min prediction time [m]
         DT = 0.2                    # Sampling time in s
