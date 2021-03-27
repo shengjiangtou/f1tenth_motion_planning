@@ -537,6 +537,17 @@ class FrenetPlaner:
         ##########################################
 
 
+        plt.plot(self.waypoints[:,[1]], self.waypoints[:,[2]], linestyle='solid', linewidth=2, color='#005293')
+        plt.draw()
+        plt.plot(vehicle_state[0],vehicle_state[1], marker='o', color='red')
+        for fp in fplist:
+            plt.plot(fp.x, fp.y,linestyle ='dashed',linewidth=2, color = '#e37222')
+        plt.plot(best_path.x,best_path.y,linestyle ='dotted',linewidth=3, color = 'green')
+        plt.axis('equal')
+        plt.show()
+
+
+
 
         ###########################################
         #                    DEBUG
@@ -558,6 +569,8 @@ class FrenetPlaner:
         speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.8
                                                 , 0.5, path)
 
+        print(speed,steering_angle)
+
         return speed,steering_angle
 
 
@@ -570,7 +583,7 @@ if __name__ == '__main__':
 
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
-    env.render()
+    #env.render()
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = FrenetPlaner(conf, env, 0.17145 + 0.15875)
@@ -587,7 +600,7 @@ if __name__ == '__main__':
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        env.render(mode='human_fast')
+        #env.render(mode='human_fast')
 
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
