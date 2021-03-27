@@ -406,10 +406,10 @@ class FrenetPlaner:
 
     def calc_frenet_paths(self, c_speed, c_d, c_d_d, c_d_dd, s0):
         # Parameter
-        MAX_ROAD_WIDTH = 0.7       # maximum road width [m]
-        D_ROAD_W = 0.05             # road width sampling length [m]
-        MAX_T = 3.0                 # max prediction time [m]
-        MIN_T = 1.0                 # min prediction time [m]
+        MAX_ROAD_WIDTH = 0.75       # maximum road width [m]
+        D_ROAD_W = 0.20             # road width sampling length [m]
+        MAX_T = 1.5                 # max prediction time [m]
+        MIN_T = 0.5                 # min prediction time [m]
         DT = 0.2                    # Sampling time in s
         TARGET_SPEED = 8.0          # Target speed in [m/s]
         D_T_S = 1.0                 # target speed sampling length [m/s]
@@ -536,17 +536,18 @@ class FrenetPlaner:
         #                    DEBUG
         ##########################################
 
+        debugplot=1
+        if debugplot == 1:
+            plt.cla()
+            plt.axis([-40, 2, -10, 10])
+            plt.plot(self.waypoints[:,[1]], self.waypoints[:,[2]], linestyle='solid', linewidth=2, color='#005293')
+            plt.plot(vehicle_state[0],vehicle_state[1], marker='o', color='red')
+            for fp in fplist:
+                plt.plot(fp.x, fp.y,linestyle ='dashed',linewidth=2, color = '#e37222')
 
-        plt.plot(self.waypoints[:,[1]], self.waypoints[:,[2]], linestyle='solid', linewidth=2, color='#005293')
-        plt.draw()
-        plt.plot(vehicle_state[0],vehicle_state[1], marker='o', color='red')
-        for fp in fplist:
-            plt.plot(fp.x, fp.y,linestyle ='dashed',linewidth=2, color = '#e37222')
-        plt.plot(best_path.x,best_path.y,linestyle ='dotted',linewidth=3, color = 'green')
-        plt.axis('equal')
-        plt.show()
-
-
+            plt.plot(best_path.x,best_path.y,linestyle ='dotted',linewidth=3, color = 'green')
+            plt.pause(0.001)
+            plt.axis('equal')
 
 
         ###########################################
@@ -566,10 +567,7 @@ class FrenetPlaner:
         path = self.path_planner(vehicle_state, obstacles)
 
         # Calculate the steering angle and the speed in the controller
-        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.8
-                                                , 0.5, path)
-
-        print(speed,steering_angle)
+        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.9, 0.5, path)
 
         return speed,steering_angle
 
