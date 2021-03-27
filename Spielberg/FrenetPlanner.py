@@ -508,12 +508,7 @@ class FrenetPlaner:
         # Get current position S and distance d to the global raceline
         state = np.stack((vehicle_state[0], vehicle_state[1]), axis=0)
         traj = np.stack((self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]), axis=-1)
-        s_current, d_current = tph.path_matching_global(traj,state)
-        #print("S_from_Path: %.4f , D_from_Path %.4f" % (s_current, d_current))
-
-        # Update Vehicle Parameter
-        self.s0 = s_current
-        self.c_d = d_current
+        self.s0, self.c_d = tph.path_matching_global(traj,state)
 
         # Calculate the optimal paths in the frenet frame
         fplist = self.calc_frenet_paths(vehicle_state[3], self.c_d, self.c_d_d, self.c_d_dd, self.s0)
@@ -521,10 +516,10 @@ class FrenetPlaner:
         # Calculate the one optimal path based closest to the global path (raceline)
         fplist = self.calc_global_paths(fplist, self.csp, vehicle_state)
 
-        # Check if there are obstacles in the way of the path
+        # Collision Check: Check if there are obstacles in the way of the path
         #fplist = self.check_paths(fplist, obstacles)
 
-        # find minimum cost path
+        # Find the path with the minimum cost = optimal path to drive
         min_cost = float("inf")
         best_path = None
         for fp in fplist:
@@ -532,8 +527,7 @@ class FrenetPlaner:
                 min_cost = fp.cf
                 best_path = fp
 
-        best_path
-
+        # Update additional paramter
         self.c_d_d = best_path.d_d[1]
         self.c_d_dd = best_path.d_dd[1]
 
