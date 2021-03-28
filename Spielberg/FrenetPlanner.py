@@ -369,7 +369,7 @@ class FrenetPlaner:
 
 
     def check_collision(self, fp, ob):
-        ROBOT_RADIUS = 0.5                  # robot radius [m]
+        ROBOT_RADIUS = 0.30                  # robot radius [m]
 
         for i in range(len(ob[:, 0])):
             d = [((ix - ob[i, 0]) ** 2 + (iy - ob[i, 1]) ** 2)
@@ -382,20 +382,20 @@ class FrenetPlaner:
 
         return True
 
-    def check_paths(self, fplist,ob):
+    def check_paths(self, fplist, ob):
         MAX_SPEED = 12.0                    # maximum speed [m/s]
-        MAX_ACCEL = 8.0                     # maximum acceleration [m/ss]
+        MAX_ACCEL = 20.0                    # maximum acceleration [m/ss]
         MAX_CURVATURE = 1.0                 # maximum curvature [1/m]
 
         ok_ind = []
         for i, _ in enumerate(fplist):
-            if any([v > MAX_SPEED for v in fplist[i].s_d]):  # Max speed check
+            if any([v > MAX_SPEED for v in fplist[i].s_d]):         # Max speed check
                 continue
             elif any([abs(a) > MAX_ACCEL for a in
-                      fplist[i].s_dd]):  # Max accel check
+                      fplist[i].s_dd]):                             # Max accel check
                 continue
             elif any([abs(c) > MAX_CURVATURE for c in
-                      fplist[i].c]):  # Max curvature check
+                      fplist[i].c]):                                # Max curvature check
                 continue
             elif not self.check_collision(fplist[i], ob):
                 continue
@@ -408,7 +408,7 @@ class FrenetPlaner:
         # Parameter
         MAX_ROAD_WIDTH = 1.00       # maximum road width [m]
         D_ROAD_W = 0.50            # road width sampling length [m]
-        MAX_T = 1.5                 # max prediction time [m]
+        MAX_T = 2.0                 # max prediction time [m]
         MIN_T = 0.5                 # min prediction time [m]
         DT = 0.2                    # Sampling time in s
         TARGET_SPEED = 8.0          # Target speed in [m/s]
@@ -419,8 +419,8 @@ class FrenetPlaner:
         K_J = 0.1                   # Weights for Jerk
         K_T = 0.1                   # Weights for Time
         K_D = 100.0                   # Weights for
-        K_LAT = 1.0
-        K_LON = 1.0
+        K_LAT = 50.0
+        K_LON = 50.0
 
         frenet_paths = []
 
@@ -517,7 +517,7 @@ class FrenetPlaner:
         fplist = self.calc_global_paths(fplist, self.csp, vehicle_state)
 
         # Collision Check: Check if there are obstacles in the way of the path
-        #fplist = self.check_paths(fplist, obstacles)
+        fplist = self.check_paths(fplist, obstacles)
 
         # Find the path with the minimum cost = optimal path to drive
         min_cost = float("inf")
@@ -536,12 +536,16 @@ class FrenetPlaner:
         #                    DEBUG
         ##########################################
 
-        debugplot=0
+        debugplot=1
         if debugplot == 1:
             plt.cla()
             plt.axis([-40, 2, -10, 10])
             plt.plot(self.waypoints[:,[1]], self.waypoints[:,[2]], linestyle='solid', linewidth=2, color='#005293')
             plt.plot(vehicle_state[0],vehicle_state[1], marker='o', color='red')
+            obs_x = [x for x, y in obstacles]
+            obs_y = [y for x, y in obstacles]
+            plt.plot(obs_x, obs_y, 'ok')
+            plt.plot(vehicle_state[0], vehicle_state[1], marker='o', color='red')
             for fp in fplist:
                 plt.plot(fp.x, fp.y,linestyle ='dashed',linewidth=2, color = '#e37222')
 
@@ -561,7 +565,7 @@ class FrenetPlaner:
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
         # Detect Obstacles on the track
-        obstacles = np.array([[20.0, 10.0],[30.0, 6.0]])
+        obstacles = np.array([[-15.0, -4.90],[-15.0, -4.85], [-15.0, -4.80],[-10.0, -2.75]])
 
         # Calculate the optimal path in the frenet frame
         path = self.path_planner(vehicle_state, obstacles)
@@ -581,7 +585,7 @@ if __name__ == '__main__':
 
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
-    env.render()
+    #env.render()
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = FrenetPlaner(conf, env, 0.17145 + 0.15875)
@@ -598,7 +602,7 @@ if __name__ == '__main__':
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        env.render(mode='human_fast')
+        #env.render(mode='human_fast')
 
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
