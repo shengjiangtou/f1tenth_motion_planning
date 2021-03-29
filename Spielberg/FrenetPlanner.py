@@ -420,7 +420,7 @@ class FrenetPlaner:
         K_T = 0.1                   # Weights for Time
         K_D = 100.0                   # Weights for
         K_LAT = 50.0
-        K_LON = 50.0
+        K_LON = 10.0
 
         frenet_paths = []
 
@@ -434,31 +434,44 @@ class FrenetPlaner:
                 # lat_qp = quintic_polynomial(c_d, c_d_d, c_d_dd, di, 0.0, 0.0, Ti)
                 lat_qp = QuinticPolynomial(c_d, c_d_d, c_d_dd, di, 0.0, 0.0, Ti)
 
+                # Calculate Lateral Position
                 fp.t = [t for t in np.arange(0.0, Ti, DT)]
                 fp.d = [lat_qp.calc_point(t) for t in fp.t]
+                # Calculate first derivative of position: Lateral Veloctiy
                 fp.d_d = [lat_qp.calc_first_derivative(t) for t in fp.t]
+                # Calculate first derivative of position: Lateral Acceleration
                 fp.d_dd = [lat_qp.calc_second_derivative(t) for t in fp.t]
+                # Calculate first derivative of position: Lateral Jerk
                 fp.d_ddd = [lat_qp.calc_third_derivative(t) for t in fp.t]
 
                 # Longitudinal motion planning (Velocity keeping)
                 for tv in np.arange(TARGET_SPEED - D_T_S * N_S_SAMPLE,
                                     TARGET_SPEED + D_T_S * N_S_SAMPLE, D_T_S):
-                    tfp = copy.deepcopy(fp)
+                    tfp = copy.copy(fp)
                     lon_qp = QuarticPolynomial(s0, c_speed, 0.0, tv, 0.0, Ti)
 
+                    # Calculate Longitudinal Position
                     tfp.s = [lon_qp.calc_point(t) for t in fp.t]
+                    # Calculate first derivative of position: Longitudinal Veloctiy
                     tfp.s_d = [lon_qp.calc_first_derivative(t) for t in fp.t]
+                    # Calculate second derivative of position: Longitudinal Acceleration
                     tfp.s_dd = [lon_qp.calc_second_derivative(t) for t in fp.t]
+                    # Calculate thrid derivative of position: Longitudinal Jerk
                     tfp.s_ddd = [lon_qp.calc_third_derivative(t) for t in fp.t]
 
-                    Jp = sum(np.power(tfp.d_ddd, 2))  # square of jerk
-                    Js = sum(np.power(tfp.s_ddd, 2))  # square of jerk
+                    # Calculate square of jerk - Lateral
+                    l_jerk_sum = sum(np.power(tfp.d_ddd, 2))
+                    # Calculate square of jerk - Longitudinal
+                    s_jerk_sum = sum(np.power(tfp.s_ddd, 2))
 
-                    # square of diff from target speed
-                    ds = (TARGET_SPEED - tfp.s_d[-1]) ** 2
+                    # Calculate square of diff from target speed
+                    v_diff = (TARGET_SPEED - tfp.s_d[-1]) ** 2
 
-                    tfp.cd = K_J * Jp + K_T * Ti + K_D * tfp.d[-1] ** 2
-                    tfp.cv = K_J * Js + K_T * Ti + K_D * ds
+                    # Calculate Lateral Costs: Influence Jerk Lat + Influence Time + Influence Distance from optimal path
+                    tfp.cd = K_J * l_jerk_sum + K_T * Ti + K_D * tfp.d[-1] ** 2
+                    # Calculate Lateral Costs: Influence Jerk Long + Influence Time + Influence Difference Speed
+                    tfp.cv = K_J * s_jerk_sum + K_T * Ti + K_D * v_diff
+                    # Calculate final cost of the frenet Path: Weight_Lateral * Costs_Lateral + Weight_Longitudinal * Costs_Longitudinal
                     tfp.cf = K_LAT * tfp.cd + K_LON * tfp.cv
 
                     frenet_paths.append(tfp)
@@ -517,7 +530,7 @@ class FrenetPlaner:
         fplist = self.calc_global_paths(fplist, self.csp, vehicle_state)
 
         # Collision Check: Check if there are obstacles in the way of the path
-        fplist = self.check_paths(fplist, obstacles)
+        #fplist = self.check_paths(fplist, obstacles)
 
         # Find the path with the minimum cost = optimal path to drive
         min_cost = float("inf")
@@ -536,7 +549,7 @@ class FrenetPlaner:
         #                    DEBUG
         ##########################################
 
-        debugplot=1
+        debugplot=0
         if debugplot == 1:
             plt.cla()
             plt.axis([-40, 2, -10, 10])
@@ -585,7 +598,7 @@ if __name__ == '__main__':
 
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
-    #env.render()
+    env.render()
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = FrenetPlaner(conf, env, 0.17145 + 0.15875)
@@ -602,7 +615,7 @@ if __name__ == '__main__':
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        #env.render(mode='human_fast')
+        env.render(mode='human_fast')
 
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
