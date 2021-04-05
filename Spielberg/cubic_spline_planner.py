@@ -39,7 +39,7 @@ class Spline:
                 (self.c[i + 1] + 2.0 * self.c[i]) / 3.0
             self.b.append(tb)
 
-    def calc(self, t):
+    def calc(self, t, s_max):
         """
         Calc position
 
@@ -47,10 +47,14 @@ class Spline:
 
         """
 
+        if t > s_max:
+            t_new = t- s_max
+            t = t_new
+
         if t < self.x[0]:
             return None
         elif t > self.x[-1]:
-            return None
+            t= 0
 
         i = self.__search_index(t)
         dx = t - self.x[i]
@@ -59,17 +63,20 @@ class Spline:
 
         return result
 
-    def calcd(self, t):
+    def calcd(self, t, s_max):
         """
         Calc first derivative
 
         if t is outside of the input x, return None
         """
+        if t > s_max:
+            t_new = t- s_max
+            t = t_new
 
         if t < self.x[0]:
             return None
         elif t > self.x[-1]:
-            return None
+            t= 0
 
         i = self.__search_index(t)
         dx = t - self.x[i]
@@ -145,12 +152,12 @@ class Spline2D:
         s.extend(np.cumsum(self.ds))
         return s
 
-    def calc_position(self, s):
+    def calc_position(self, s, s_max):
         """
         calc position
         """
-        x = self.sx.calc(s)
-        y = self.sy.calc(s)
+        x = self.sx.calc(s, s_max)
+        y = self.sy.calc(s, s_max)
 
         return x, y
 
@@ -165,12 +172,12 @@ class Spline2D:
         k = (ddy * dx - ddx * dy) / ((dx ** 2 + dy ** 2)**(3 / 2))
         return k
 
-    def calc_yaw(self, s):
+    def calc_yaw(self, s, s_max):
         """
         calc yaw
         """
-        dx = self.sx.calcd(s)
-        dy = self.sy.calcd(s)
+        dx = self.sx.calcd(s, s_max)
+        dy = self.sy.calcd(s, s_max)
         yaw = math.atan2(dy, dx)
         return yaw
 

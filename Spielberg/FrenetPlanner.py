@@ -477,15 +477,22 @@ class FrenetPlaner:
         return frenet_paths
 
     def calc_global_paths(self, fplist, csp, vehicle_state):
+        # Calculating the maximal s-value to make the s=0 transition on the star/finish line
+        s_max = max(self.waypoints[:,[0]])
+
+        # For loop for calculation the global x and y positions
         for fp in fplist:
-            test = fp
+
             # calc global positions
             for i in range(len(fp.s)):
-                ix, iy = csp.calc_position(fp.s[i])
+                if fp.s[i] > s_max[0]:
+                    fp.s[i] = fp.s[i] - s_max[0]
+
+                ix, iy = csp.calc_position(fp.s[i], s_max[0])
 
                 if ix is None:
                     break
-                i_yaw = csp.calc_yaw(fp.s[i])
+                i_yaw = csp.calc_yaw(fp.s[i], s_max[0])
                 di = fp.d[i]
                 fx = ix - di * math.cos(i_yaw + math.pi / 2.0)
                 fy = iy - di * math.sin(i_yaw + math.pi / 2.0)
@@ -507,6 +514,9 @@ class FrenetPlaner:
             for i in range(len(fp.yaw) - 1):
                 fp.c.append((fp.yaw[i + 1] - fp.yaw[i]) / fp.ds[i])
 
+        self.debug_count = self.debug_count +1
+        if self.debug_count == 89:
+            test = 0
         return fplist
 
     def path_planner(self, vehicle_state,  obstacles):
@@ -547,7 +557,7 @@ class FrenetPlaner:
         #                    DEBUG
         ##########################################
 
-        debugplot=1
+        debugplot=0
         if debugplot == 1:
             plt.cla()
             plt.axis([-40, 2, -10, 10])
@@ -592,7 +602,7 @@ if __name__ == '__main__':
 
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
-    #env.render()
+    env.render()
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = FrenetPlaner(conf, env, 0.17145 + 0.15875)
@@ -609,7 +619,7 @@ if __name__ == '__main__':
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        #env.render(mode='human_fast')
+        env.render(mode='human_fast')
 
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
