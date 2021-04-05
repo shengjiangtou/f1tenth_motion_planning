@@ -369,7 +369,7 @@ class FrenetPlaner:
 
 
     def check_collision(self, fp, ob):
-        ROBOT_RADIUS = 0.5                  # robot radius [m]
+        ROBOT_RADIUS = 0.3                  # robot radius [m]
 
         for i in range(len(ob[:, 0])):
             d = [((ix - ob[i, 0]) ** 2 + (iy - ob[i, 1]) ** 2)
@@ -588,7 +588,9 @@ class FrenetPlaner:
         path = self.path_planner(vehicle_state, obstacles)
 
         # Calculate the steering angle and the speed in the controller
-        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.9, 0.5, path)
+        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.9, 0.55, path)
+
+        print("Current Speed: %2.2f Opti Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[0]))
 
         return speed,steering_angle
 
