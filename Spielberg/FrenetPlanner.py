@@ -9,8 +9,8 @@ import matplotlib.pyplot as plt
 import pickle
 import copy
 import cubic_spline_planner
-import trajectory_planning_helpers.path_matching_local as tph
 import trajectory_planning_helpers.path_matching_global as tph
+import trajectory_planning_helpers.side_of_line as sol
 
 """ 
 Planner Helpers
@@ -404,32 +404,44 @@ class FrenetPlaner:
 
         return [fplist[i] for i in ok_ind]
 
-    def calc_frenet_paths(self, c_speed, c_d, c_d_d, c_d_dd, s0):
-        # Parameter
-        MAX_ROAD_WIDTH = 1.00       # maximum road width [m]
-        D_ROAD_W = 0.25             # road width sampling length [m]
-        MAX_T = 1.5                 # max prediction time [m]
-        MIN_T = 1.0                 # min prediction time [m]
-        DT = 0.2                    # Sampling time in s
+    def calc_frenet_paths(self, vehicle_state, c_d, c_d_d, c_d_dd, s0):
 
-        D_T_S = 0.25                 # target speed sampling length [m/s]
-        N_S_SAMPLE = 1              # sampling number of target speed
+        #############################      Define  Parameter
 
-        # Weights for the cost for the individual Frenet paths
-        K_J = 0.1                   # Weights for Jerk
-        K_T = 0.1                   # Weights for Time
-        K_D = 100.0                   # Weights for
+        # Paramter for the path creation
+        MAX_ROAD_WIDTH = 1.00           # maximum road width [m]
+        D_ROAD_W = 0.5                  # road width sampling length [m]
+        MAX_T = 1.5                     # max prediction time [m]
+        MIN_T = 1.25                    # min prediction time [m]
+        DT = 0.2                        # Sampling time in s
+        D_T_S = 0.25                    # target speed sampling length [m/s]
+        N_S_SAMPLE = 1                  # sampling number of target speed
+
+        # Paramter for the weights for the cost for the individual frenet paths
+        K_J = 0.1                       # Weights for Jerk
+        K_T = 0.1                       # Weights for Time
+        K_D = 100.0                     # Weights for
         K_LAT = 1.0
         K_LON = 1.0
 
-        # Get current Velocity from the optimal velocity planner
+        #############################      Precalculations
+
+        # Get current Velocity from the optimal raceline file and create the target speed in [m/s]
         s_index = np.argmin(abs(self.csp.s - (s0)))
         speed_list = self.waypoints[:,5].tolist()
-        TARGET_SPEED = speed_list[s_index]                          # Target speed in [m/s]
+        TARGET_SPEED = speed_list[s_index]
+
+        # Get the current Side of the vehicle from the raceline - This is for CLOCKWISE Tracks
+        # Side = -1 -> Right Side of the racline \ Side = 1 -> Left Side of the racline
+        a = np.array([self.waypoints[:, 1][s_index-1], self.waypoints[:, 2][s_index-1]])
+        b = np.array([self.waypoints[:, 1][s_index+1], self.waypoints[:, 2][s_index+1]])
+        side = np.sign((b[0] - a[0]) * (vehicle_state[1] - a[1]) - (b[1] - a[1]) * (vehicle_state[0] - a[0]))
+        c_d = c_d * side * -1
+
+
+        ######################## Generate Paths for each offset goal
 
         frenet_paths = []
-
-        # generate path to each offset goal
         for di in np.arange(-MAX_ROAD_WIDTH, MAX_ROAD_WIDTH, D_ROAD_W):
 
             # Lateral motion planning
@@ -453,7 +465,7 @@ class FrenetPlaner:
                 for tv in np.arange(TARGET_SPEED - D_T_S * N_S_SAMPLE,
                                     TARGET_SPEED + D_T_S * N_S_SAMPLE, D_T_S):
                     tfp = copy.deepcopy(fp)
-                    lon_qp = QuarticPolynomial(s0, c_speed, 0.0, tv, 0.0, Ti)
+                    lon_qp = QuarticPolynomial(s0, vehicle_state[3], 0.0, tv, 0.0, Ti)
 
                     #Calculate longitudinal position
                     tfp.s = [lon_qp.calc_point(t) for t in fp.t]
@@ -504,7 +516,6 @@ class FrenetPlaner:
                 fp.x.append(fx)
                 fp.y.append(fy)
 
-
             # calc yaw and ds
             for i in range(len(fp.x) - 1):
                 dx = fp.x[i + 1] - fp.x[i]
@@ -536,7 +547,7 @@ class FrenetPlaner:
         self.s0, self.c_d = tph.path_matching_global(traj,state)
 
         # Calculate the optimal paths in the frenet frame
-        fplist = self.calc_frenet_paths(vehicle_state[3], self.c_d, self.c_d_d, self.c_d_dd, self.s0)
+        fplist = self.calc_frenet_paths(vehicle_state, self.c_d, self.c_d_d, self.c_d_dd, self.s0)
 
         # Calculate the one optimal path based closest to the global path (raceline)
         fplist = self.calc_global_paths(fplist, self.csp, vehicle_state)
@@ -561,11 +572,11 @@ class FrenetPlaner:
         #                    DEBUG
         ##########################################
 
-        debugplot=0
+        debugplot=1
         if debugplot == 1:
             plt.cla()
             #plt.axis([-40, 2, -10, 10])
-            plt.axis([-40, 2, -10, 10])
+            plt.axis([vehicle_state[0]-7.5, vehicle_state[0]+7.5, vehicle_state[1]-3.5, vehicle_state[1]+3.5])
             plt.plot(self.waypoints[:,[1]], self.waypoints[:,[2]], linestyle='solid', linewidth=2, color='#005293')
             plt.plot(vehicle_state[0],vehicle_state[1], marker='o', color='red')
             for fp in fplist:
@@ -595,10 +606,10 @@ class FrenetPlaner:
         # Calculate the steering angle and the speed in the controller
         speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 1.45, 0.50, path)
 
-        print("Current Speed: %2.2f PP Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[-1]))
+        #print("Current Speed: %2.2f PP Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[-1]))
 
         # Use the speed from the Frenet Planer calculation and add a gain to it
-        speed = path.s_d[-1] * 0.50
+        speed = path.s_d[-1] * 0.80
 
         return speed,steering_angle
 
@@ -612,7 +623,7 @@ if __name__ == '__main__':
 
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
-    env.render()
+    #env.render()
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = FrenetPlaner(conf, env, 0.17145 + 0.15875)
@@ -629,7 +640,7 @@ if __name__ == '__main__':
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        env.render(mode='human_fast')
+        #env.render(mode='human_fast')
 
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
