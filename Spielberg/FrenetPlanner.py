@@ -407,20 +407,25 @@ class FrenetPlaner:
     def calc_frenet_paths(self, c_speed, c_d, c_d_d, c_d_dd, s0):
         # Parameter
         MAX_ROAD_WIDTH = 1.00       # maximum road width [m]
-        D_ROAD_W = 0.50            # road width sampling length [m]
+        D_ROAD_W = 0.25             # road width sampling length [m]
         MAX_T = 1.5                 # max prediction time [m]
-        MIN_T = 0.5                 # min prediction time [m]
+        MIN_T = 1.0                 # min prediction time [m]
         DT = 0.2                    # Sampling time in s
-        TARGET_SPEED = 8.0          # Target speed in [m/s]
-        D_T_S = 1.0                 # target speed sampling length [m/s]
+
+        D_T_S = 0.25                 # target speed sampling length [m/s]
         N_S_SAMPLE = 1              # sampling number of target speed
 
-        # cost weights
+        # Weights for the cost for the individual Frenet paths
         K_J = 0.1                   # Weights for Jerk
         K_T = 0.1                   # Weights for Time
         K_D = 100.0                   # Weights for
         K_LAT = 1.0
         K_LON = 1.0
+
+        # Get current Velocity from the optimal velocity planner
+        s_index = np.argmin(abs(self.csp.s - (s0)))
+        speed_list = self.waypoints[:,5].tolist()
+        TARGET_SPEED = speed_list[s_index]                          # Target speed in [m/s]
 
         frenet_paths = []
 
@@ -514,9 +519,7 @@ class FrenetPlaner:
             for i in range(len(fp.yaw) - 1):
                 fp.c.append((fp.yaw[i + 1] - fp.yaw[i]) / fp.ds[i])
 
-        self.debug_count = self.debug_count +1
-        if self.debug_count == 89:
-            test = 0
+
         return fplist
 
     def path_planner(self, vehicle_state,  obstacles):
@@ -528,7 +531,8 @@ class FrenetPlaner:
 
         # Get current position S and distance d to the global raceline
         state = np.stack((vehicle_state[0], vehicle_state[1]), axis=0)
-        traj = np.stack((self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]), axis=-1)
+        #traj = np.stack((self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]), axis=-1)
+        traj = np.stack((self.csp.s, self.csp.sx.y, self.csp.sy.y),axis=-1)
         self.s0, self.c_d = tph.path_matching_global(traj,state)
 
         # Calculate the optimal paths in the frenet frame
@@ -560,6 +564,7 @@ class FrenetPlaner:
         debugplot=0
         if debugplot == 1:
             plt.cla()
+            #plt.axis([-40, 2, -10, 10])
             plt.axis([-40, 2, -10, 10])
             plt.plot(self.waypoints[:,[1]], self.waypoints[:,[2]], linestyle='solid', linewidth=2, color='#005293')
             plt.plot(vehicle_state[0],vehicle_state[1], marker='o', color='red')
@@ -588,9 +593,12 @@ class FrenetPlaner:
         path = self.path_planner(vehicle_state, obstacles)
 
         # Calculate the steering angle and the speed in the controller
-        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.9, 0.55, path)
+        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 1.45, 0.50, path)
 
-        print("Current Speed: %2.2f Opti Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[0]))
+        print("Current Speed: %2.2f PP Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[-1]))
+
+        # Use the speed from the Frenet Planer calculation and add a gain to it
+        speed = path.s_d[-1] * 0.50
 
         return speed,steering_angle
 
