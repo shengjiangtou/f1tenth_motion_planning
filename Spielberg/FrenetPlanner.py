@@ -367,8 +367,6 @@ class PurePursuitPlanner:
         # Create waypoints based on the current frenet path
         wpts = np.vstack((np.array(local_path.x), np.array(local_path.y))).T
         nearest_point_front, nearest_dist, t, target_index = nearest_point_on_trajectory(position_front_axle, wpts)
-        # plt.plot(fx, fy, marker='o', color='magenta')
-        # plt.plot(nearest_point_front[0],nearest_point_front[1],marker='*', color='blue')
 
         # Calculate the Distances from the front axle to all the waypoints
         distance_nearest_point_x = fx - nearest_point_front[0]
@@ -386,7 +384,7 @@ class PurePursuitPlanner:
         ef = np.dot(vec_dist_nearest_point.T, front_axle_vec_rot_90)
 
         #############  Calculate the heading error theta_e  normalized to an angle to [-pi, pi]     ##########
-        # Extract heading on the raceline
+        # Extract the optimal heading on the optimal raceline
         # BE CAREFUL: If your raceline is based on a different coordinate system you need to -+ pi/2 = 90 degrees
         s_index = np.argmin(abs(global_path.s- (s_position)))
         theta_raceline = self.waypoints[s_index][3]
@@ -464,6 +462,7 @@ class FrenetPlaner:
             collision = any([di <= ROBOT_RADIUS ** 2 for di in d])
 
             if collision:
+                plt.plot(fp.x, fp.y, linestyle="solid", color='red')
                 return False
 
         return True
@@ -477,24 +476,29 @@ class FrenetPlaner:
         for i, _ in enumerate(fplist):
             # Max speed check: Check if the veloctiy in this trajectory is higher than the max. vel. of the vehicle
             if any([v > MAX_SPEED for v in fplist[i].s_d]):
+                path_check = 'no path found because of SPEED'
                 continue
 
             # Max Lat. Acceleration check: Check if the Lat. Acc. in this trajectory is higher than the max. acc. of the vehicle
-            elif any([abs(a) > MAX_ACCEL for a in
-                      fplist[i].s_dd]):  # Max accel check
+            elif any([abs(a) > MAX_ACCEL for a in fplist[i].s_dd]):
+                path_check = 'no path found because of ACCELERATION'
                 continue
-                print('no ACC violation in the paths')
-                
+
             # Max Curvature check: Check if the curvature in this trajectory is higher than possible driveable curvature of the vehicle
-            elif any([abs(c) > MAX_CURVATURE for c in
-                      fplist[i].c]):  # Max curvature check
+            elif any([abs(c) > MAX_CURVATURE for c in fplist[i].c]):  # Max curvature check
+                path_check = 'no path found because of CURVATURE'
                 continue
 
             # Obstacle Collision Check: Check which of the paths are interferring with an obstacle
             elif not self.check_collision(fplist[i], ob):
+                path_check = 'no path found because of OBSTACLES'
                 continue
 
+
             ok_ind.append(i)
+
+        if not ok_ind:
+            print (path_check)
 
         return [fplist[i] for i in ok_ind]
 
@@ -508,14 +512,14 @@ class FrenetPlaner:
         D_ROAD_W = 0.20                     # Sampling length along the width of the track [m]
         MAX_T = 1.5                         # Max prediction time for the path horizon [m]
         MIN_T = 1.0                         # Min prediction time for the path horizon [m]
-        DT = 0.2                            # Sampling time [s]
+        DT = 0.1                            # Sampling time [s]
         D_T_S = 0.10                        # Target speed sampling length [m/s]
         N_S_SAMPLE = 1                      # Sampling number of target speed
 
         # Parameter for the weights for the cost for the individual frenet paths
-        K_J = 0.1  # Weights for Jerk
-        K_T = 0.1  # Weights for Time
-        K_D = 100.0  # Weights for
+        K_J = 0.1           # Weights for Jerk
+        K_T = 0.1           # Weights for Time
+        K_D = 100.0         # Weights for
         K_LAT = 1.0
         K_LON = 1.0
 
@@ -665,7 +669,6 @@ class FrenetPlaner:
 
         # Check if best_path was found - if not use the last path found and use this one as control input
         if not best_path:
-            print("No path found")
             best_path = self.last_best_bath
 
         # Update additional paramter
@@ -688,13 +691,19 @@ class FrenetPlaner:
                 plt.plot(fp.x, fp.y, linestyle='dashed', linewidth=2, color='#e37222')
 
             for obs in obstacles:
-                plt.plot(obs[0], obs[1],  marker='*', color='magenta')
+                plt.plot(obs[0], obs[1],  marker='*', color='black')
+                plt.plot(obs[0], obs[1]+0.5, marker='*', color='magenta')
+                plt.plot(obs[0]-0.35, obs[1]+0.35, marker='*', color='magenta')
+                plt.plot(obs[0]-0.5, obs[1], marker='*', color='magenta')
+                plt.plot(obs[0]+0.35, obs[1]+0.35, marker='*', color='magenta')
+                plt.plot(obs[0]+ 0.5, obs[1] , marker='*', color='magenta')
+
 
             plt.plot(best_path.x, best_path.y, linestyle='dotted', linewidth=3, color='green')
             plt.pause(0.001)
             plt.axis('equal')
             self.debug_count = self.debug_count + 1
-            if self.debug_count > 50:
+            if self.debug_count > 150:
                 test = 0
 
         ###########################################
@@ -708,7 +717,8 @@ class FrenetPlaner:
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
         # Detect Obstacles on the track
-        obstacles = np.array([[-9.5, -3.4], [-11.5, -3.7]])
+        #obstacles = np.array([[-9.5, -3.4], [-11.5, -3.7]])
+        obstacles = np.array([[-9.5, -3.4]])
 
         # Calculate the optimal path in the frenet frame
         path = self.path_planner(vehicle_state, obstacles)
