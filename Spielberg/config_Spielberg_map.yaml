@@ -10,16 +10,16 @@ map_ext: '.png'
 
 # starting pose for map sy: -0.8491629 sx: -0.0440806
 # Start\ Finish Line: -0.0440806; -0.8491629;3.4034118;
-# T1 (Niki Lauda):
+# T1 (Niki Lauda): -26.8810112; -8.0811682; 3.3949863;
 # T2 (Remus):
 # T3 (Schlossgold):
 # T4 (Rauch):
 # T5 (Wuerth):
 # T7 (Rindt):
 # Middle section: -51.7582509;52.9369422;6.1060188;
-sx: -0.0440806
-sy: -0.8491629
-stheta: 3.4034118
+sx: -26.8810112
+sy: -8.0811682
+stheta: 3.3949863
 
 sx2: 1.3079426
 sy2: -0.4869018

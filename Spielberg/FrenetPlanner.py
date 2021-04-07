@@ -15,6 +15,8 @@ import trajectory_planning_helpers.side_of_line as sol
 """ 
 Planner Helpers
 """
+
+
 @njit(fastmath=False, cache=True)
 def nearest_point_on_trajectory(point, trajectory):
     '''
@@ -29,25 +31,26 @@ def nearest_point_on_trajectory(point, trajectory):
     trajectory: Nx2 matrix of (x,y) trajectory waypoints
         - these must be unique. If they are not unique, a divide by 0 error will destroy the world
     '''
-    diffs = trajectory[1:,:] - trajectory[:-1,:]
-    l2s   = diffs[:,0]**2 + diffs[:,1]**2
+    diffs = trajectory[1:, :] - trajectory[:-1, :]
+    l2s = diffs[:, 0] ** 2 + diffs[:, 1] ** 2
     # this is equivalent to the elementwise dot product
     # dots = np.sum((point - trajectory[:-1,:]) * diffs[:,:], axis=1)
-    dots = np.empty((trajectory.shape[0]-1, ))
+    dots = np.empty((trajectory.shape[0] - 1,))
     for i in range(dots.shape[0]):
         dots[i] = np.dot((point - trajectory[i, :]), diffs[i, :])
     t = dots / l2s
-    t[t<0.0] = 0.0
-    t[t>1.0] = 1.0
+    t[t < 0.0] = 0.0
+    t[t > 1.0] = 1.0
     # t = np.clip(dots / l2s, 0.0, 1.0)
-    projections = trajectory[:-1,:] + (t*diffs.T).T
+    projections = trajectory[:-1, :] + (t * diffs.T).T
     # dists = np.linalg.norm(point - projections, axis=1)
     dists = np.empty((projections.shape[0],))
     for i in range(dists.shape[0]):
         temp = point - projections[i]
-        dists[i] = np.sqrt(np.sum(temp*temp))
+        dists[i] = np.sqrt(np.sum(temp * temp))
     min_dist_segment = np.argmin(dists)
     return projections[min_dist_segment], dists[min_dist_segment], t[min_dist_segment], min_dist_segment
+
 
 @njit(fastmath=False, cache=True)
 def first_point_on_trajectory_intersecting_circle(point, radius, trajectory, t=0.0, wrap=False):
@@ -63,15 +66,15 @@ def first_point_on_trajectory_intersecting_circle(point, radius, trajectory, t=0
     first_i = None
     first_p = None
     trajectory = np.ascontiguousarray(trajectory)
-    for i in range(start_i, trajectory.shape[0]-1):
-        start = trajectory[i,:]
-        end = trajectory[i+1,:]+1e-6
+    for i in range(start_i, trajectory.shape[0] - 1):
+        start = trajectory[i, :]
+        end = trajectory[i + 1, :] + 1e-6
         V = np.ascontiguousarray(end - start)
 
-        a = np.dot(V,V)
-        b = 2.0*np.dot(V, start - point)
-        c = np.dot(start, start) + np.dot(point,point) - 2.0*np.dot(start, point) - radius*radius
-        discriminant = b*b-4*a*c
+        a = np.dot(V, V)
+        b = 2.0 * np.dot(V, start - point)
+        c = np.dot(start, start) + np.dot(point, point) - 2.0 * np.dot(start, point) - radius * radius
+        discriminant = b * b - 4 * a * c
 
         if discriminant < 0:
             continue
@@ -79,8 +82,8 @@ def first_point_on_trajectory_intersecting_circle(point, radius, trajectory, t=0
         # else:
         # if discriminant >= 0.0:
         discriminant = np.sqrt(discriminant)
-        t1 = (-b - discriminant) / (2.0*a)
-        t2 = (-b + discriminant) / (2.0*a)
+        t1 = (-b - discriminant) / (2.0 * a)
+        t2 = (-b + discriminant) / (2.0 * a)
         if i == start_i:
             if t1 >= 0.0 and t1 <= 1.0 and t1 >= start_t:
                 first_t = t1
@@ -105,20 +108,20 @@ def first_point_on_trajectory_intersecting_circle(point, radius, trajectory, t=0
     # wrap around to the beginning of the trajectory if no intersection is found1
     if wrap and first_p is None:
         for i in range(-1, start_i):
-            start = trajectory[i % trajectory.shape[0],:]
-            end = trajectory[(i+1) % trajectory.shape[0],:]+1e-6
+            start = trajectory[i % trajectory.shape[0], :]
+            end = trajectory[(i + 1) % trajectory.shape[0], :] + 1e-6
             V = end - start
 
-            a = np.dot(V,V)
-            b = 2.0*np.dot(V, start - point)
-            c = np.dot(start, start) + np.dot(point,point) - 2.0*np.dot(start, point) - radius*radius
-            discriminant = b*b-4*a*c
+            a = np.dot(V, V)
+            b = 2.0 * np.dot(V, start - point)
+            c = np.dot(start, start) + np.dot(point, point) - 2.0 * np.dot(start, point) - radius * radius
+            discriminant = b * b - 4 * a * c
 
             if discriminant < 0:
                 continue
             discriminant = np.sqrt(discriminant)
-            t1 = (-b - discriminant) / (2.0*a)
-            t2 = (-b + discriminant) / (2.0*a)
+            t1 = (-b - discriminant) / (2.0 * a)
+            t2 = (-b + discriminant) / (2.0 * a)
             if t1 >= 0.0 and t1 <= 1.0:
                 first_t = t1
                 first_i = i
@@ -132,20 +135,33 @@ def first_point_on_trajectory_intersecting_circle(point, radius, trajectory, t=0
 
     return first_p, first_i, first_t
 
-#@njit(fastmath=False, cache=True)
+
+# @njit(fastmath=False, cache=True)
 def get_actuation(pose_theta, lookahead_point, position, lookahead_distance, wheelbase):
-    waypoint_y = np.dot(np.array([np.sin(-pose_theta), np.cos(-pose_theta)]), lookahead_point[0:2]-position)
+    waypoint_y = np.dot(np.array([np.sin(-pose_theta), np.cos(-pose_theta)]), lookahead_point[0:2] - position)
     speed = lookahead_point[2]
     if np.abs(waypoint_y) < 1e-6:
         return speed, 0.
-    radius = 1/(2.0*waypoint_y/lookahead_distance**2)
-    steering_angle = np.arctan(wheelbase/radius)
+    radius = 1 / (2.0 * waypoint_y / lookahead_distance ** 2)
+    steering_angle = np.arctan(wheelbase / radius)
     return speed, steering_angle
+
+
+@njit(fastmath=False, cache=True)
+def pi_2_pi(angle):
+    if angle > math.pi:
+        return angle - 2.0 * math.pi
+    if angle < -math.pi:
+        return angle + 2.0 * math.pi
+
+    return angle
+
 
 class Datalogger:
     """
     This is the class for logging vehicle data in the F1TENTH Gym
     """
+
     def load_waypoints(self, conf):
         """
         Loading the x and y waypoints in the "..._raceline.csv" which includes the path to follow
@@ -153,15 +169,15 @@ class Datalogger:
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
     def __init__(self, conf):
-        self.conf = conf                            # Current configuration for the gym based on the maps
-        self.load_waypoints(conf)                   # Waypoints of the raceline
-        self.vehicle_position_x = []                # Current vehicle position X (rear axle) on the map
-        self.vehicle_position_y = []                # Current vehicle position Y (rear axle) on the map
-        self.vehicle_position_heading = []          # Current vehicle heading on the map
-        self.vehicle_velocity = []                  # Current vehicle velocity
-        self.control_velocity = []                  # Desired vehicle velocity based on control calculation
-        self.steering_angle = []                    # Steering angle based on control calculation
-        self.lapcounter = []                        # Current vehicle velocity
+        self.conf = conf  # Current configuration for the gym based on the maps
+        self.load_waypoints(conf)  # Waypoints of the raceline
+        self.vehicle_position_x = []  # Current vehicle position X (rear axle) on the map
+        self.vehicle_position_y = []  # Current vehicle position Y (rear axle) on the map
+        self.vehicle_position_heading = []  # Current vehicle heading on the map
+        self.vehicle_velocity = []  # Current vehicle velocity
+        self.control_velocity = []  # Desired vehicle velocity based on control calculation
+        self.steering_angle = []  # Steering angle based on control calculation
+        self.lapcounter = []  # Current vehicle velocity
 
     def logging(self, pose_x, pose_y, pose_theta, current_velocity, lap, control_veloctiy, control_steering):
         self.vehicle_position_x.append(pose_x)
@@ -171,6 +187,7 @@ class Datalogger:
         self.control_velocity.append(control_veloctiy)
         self.steering_angle.append(control_steering)
         self.lapcounter.append(lap)
+
 
 class QuarticPolynomial:
 
@@ -256,6 +273,7 @@ class QuinticPolynomial:
 
         return xt
 
+
 class FrenetPath:
 
     def __init__(self):
@@ -278,11 +296,13 @@ class FrenetPath:
         self.ds = []
         self.c = []
 
+
 class PurePursuitPlanner:
     """
     This is the PurePursuit ALgorithm that is traccking the desired path. In this case we are following the curvature
     optimal raceline.
     """
+
     def __init__(self, conf, wb):
         self.wheelbase = wb
         self.conf = conf
@@ -302,10 +322,11 @@ class PurePursuitPlanner:
 
         nearest_point, nearest_dist, t, i = nearest_point_on_trajectory(position, wpts)
         if nearest_dist < lookahead_distance:
-            lookahead_point, i2, t2 = first_point_on_trajectory_intersecting_circle(position, lookahead_distance, wpts, i+t, wrap=True)
+            lookahead_point, i2, t2 = first_point_on_trajectory_intersecting_circle(position, lookahead_distance, wpts,
+                                                                                    i + t, wrap=True)
             if i2 == None:
                 return None
-            current_waypoint = np.empty((3, ))
+            current_waypoint = np.empty((3,))
             # x, y
             current_waypoint[0:2] = wpts[i2, :]
             # speed
@@ -328,6 +349,71 @@ class PurePursuitPlanner:
 
         return speed, steering_angle
 
+    def calc_theta_and_ef(self, vehicle_state, local_path, global_path, s_position):
+        """
+        calc theta and ef
+        Theta is the heading of the car, this heading must be minimized
+        ef = crosstrack error/The distance from the optimal path/ lateral distance in frenet frame (front wheel)
+        """
+
+        ############# Calculate closest point to the front axle based on minimum distance calculation ################
+        # Calculate Position of the front axle of the vehicle based on current position
+        fx = vehicle_state[0] + self.wheelbase * math.cos(vehicle_state[2])
+        fy = vehicle_state[1] + self.wheelbase * math.sin(vehicle_state[2])
+        position_front_axle = np.array([fx, fy])
+
+        # Find target index for the correct waypoint by finding the index with the lowest distance value/hypothenuses
+        # wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
+        # Create waypoints based on the current frenet path
+        wpts = np.vstack((np.array(local_path.x), np.array(local_path.y))).T
+        nearest_point_front, nearest_dist, t, target_index = nearest_point_on_trajectory(position_front_axle, wpts)
+        # plt.plot(fx, fy, marker='o', color='magenta')
+        # plt.plot(nearest_point_front[0],nearest_point_front[1],marker='*', color='blue')
+
+        # Calculate the Distances from the front axle to all the waypoints
+        distance_nearest_point_x = fx - nearest_point_front[0]
+        distance_nearest_point_y = fy - nearest_point_front[1]
+        vec_dist_nearest_point = np.array([distance_nearest_point_x, distance_nearest_point_y])
+
+        ###################  Calculate the current Cross-Track Error ef in [m]   ################
+        # Project crosstrack error onto front axle vector
+        front_axle_vec_rot_90 = np.array([[math.cos(vehicle_state[2] - math.pi / 2.0)],
+                                          [math.sin(vehicle_state[2] - math.pi / 2.0)]])
+
+        # vec_target_2_front = np.array([dx[target_index], dy[target_index]])
+
+        # Caculate the cross-track error ef by
+        ef = np.dot(vec_dist_nearest_point.T, front_axle_vec_rot_90)
+
+        #############  Calculate the heading error theta_e  normalized to an angle to [-pi, pi]     ##########
+        # Extract heading on the raceline
+        # BE CAREFUL: If your raceline is based on a different coordinate system you need to -+ pi/2 = 90 degrees
+        s_index = np.argmin(abs(global_path.s- (s_position)))
+        theta_raceline = self.waypoints[s_index][3]
+
+        # Calculate the heading error by taking the difference between current and goal + Normalize the angles
+        theta_e = pi_2_pi(theta_raceline - vehicle_state[2])
+
+        return theta_e, ef
+
+    def Stanlycontroller(self, vehicle_state, local_path, global_path, s_position):
+        """
+        Front Wheel Feedback Controller to track the path
+        Based on the heading error theta_e and the crosstrack error ef we calculate the steering angle
+        Returns the optimal steering angle delta is P-Controller with the proportional gain k
+        """
+
+        k_path = 13.33010407  # Proportional gain for path control
+        theta_e, ef = self.calc_theta_and_ef(vehicle_state, local_path, global_path, s_position)
+
+        # Caculate steering angle based on the cross track error to the front axle in [rad]
+        cte_front = math.atan2(k_path * ef[0], vehicle_state[3])
+
+        # Calculate final steering angle/ control input in [rad]: Steering Angle based on distance error + heading error
+        delta = cte_front + theta_e
+
+        return delta
+
 
 class FrenetPlaner:
     """
@@ -343,20 +429,20 @@ class FrenetPlaner:
     """
 
     def __init__(self, conf, env, wb):
-        self.wheelbase = wb                 # Wheelbase of the vehicle
-        self.conf = conf                    # Current configuration for the gym based on the maps
-        self.env = env                     # Current environment parameter
-        self.load_waypoints(conf)           # Waypoints of the raceline
+        self.wheelbase = wb  # Wheelbase of the vehicle
+        self.conf = conf  # Current configuration for the gym based on the maps
+        self.env = env  # Current environment parameter
+        self.load_waypoints(conf)  # Waypoints of the raceline
         self.max_reacquire = 20.
-        self.c_d = 0.0                      # current lateral position in the Frenet Frame [m]
-        self.c_d_d = 0.0                    # current lateral speed in the Frenet Frame [m/s]
-        self.c_d_dd = 0.0                   # current lateral acceleration in the Frenet Frame [m/s]
-        self.s0 = 0.0                       # current course position s in the Frenet Frame
+        self.c_d = 0.0  # current lateral position in the Frenet Frame [m]
+        self.c_d_d = 0.0  # current lateral speed in the Frenet Frame [m/s]
+        self.c_d_dd = 0.0  # current lateral acceleration in the Frenet Frame [m/s]
+        self.s0 = 0.0  # current course position s in the Frenet Frame
         self.calcspline = 0
         self.csp = 0
-        self.debug_count = 0                # DEBUG - Counts
-        self.debug_array1 = []              # DEBUG - array for saving numbers
-        self.debug_array2 = []              # DEBUG - array for saving numbers
+        self.debug_count = 0  # DEBUG - Counts
+        self.debug_array1 = []  # DEBUG - array for saving numbers
+        self.debug_array2 = []  # DEBUG - array for saving numbers
         self.debug_array3 = []  # DEBUG - array for saving numbers
         self.debug_array4 = []  # DEBUG - array for saving numbers
 
@@ -368,7 +454,7 @@ class FrenetPlaner:
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
     def check_collision(self, fp, ob):
-        ROBOT_RADIUS = 0.3                  # robot radius [m]
+        ROBOT_RADIUS = 0.3  # robot radius [m]
 
         for i in range(len(ob[:, 0])):
             d = [((ix - ob[i, 0]) ** 2 + (iy - ob[i, 1]) ** 2)
@@ -381,10 +467,10 @@ class FrenetPlaner:
 
         return True
 
-    def check_paths(self, fplist,ob):
-        MAX_SPEED = 12.0                    # maximum speed [m/s]
-        MAX_ACCEL = 8.0                     # maximum acceleration [m/ss]
-        MAX_CURVATURE = 1.0                 # maximum curvature [1/m]
+    def check_paths(self, fplist, ob):
+        MAX_SPEED = 12.0  # maximum speed [m/s]
+        MAX_ACCEL = 8.0  # maximum acceleration [m/ss]
+        MAX_CURVATURE = 1.0  # maximum curvature [1/m]
 
         ok_ind = []
         for i, _ in enumerate(fplist):
@@ -408,19 +494,19 @@ class FrenetPlaner:
         #############################      Define  Parameter
 
         # Parameter for the path creation
-        MAX_PATH_WIDTH_LEFT = -1.00             # maximum planning with to the left [m]
-        MAX_PATH_WIDTH_RIGHT = 1.00             # maximum planning with to the right [m]
-        D_ROAD_W = 0.25                         # road width sampling length [m]
-        MAX_T = 1.5                             # max prediction time [m]
-        MIN_T = 1.0                             # min prediction time [m]
-        DT = 0.2                                # Sampling time in s
-        D_T_S = 0.25                            # target speed sampling length [m/s]
-        N_S_SAMPLE = 1                          # sampling number of target speed
+        MAX_PATH_WIDTH_LEFT = -1.00  # maximum planning with to the left [m]
+        MAX_PATH_WIDTH_RIGHT = 1.00  # maximum planning with to the right [m]
+        D_ROAD_W = 0.25  # road width sampling length [m]
+        MAX_T = 1.5  # max prediction time [m]
+        MIN_T = 1.0  # min prediction time [m]
+        DT = 0.2  # Sampling time in s
+        D_T_S = 0.25  # target speed sampling length [m/s]
+        N_S_SAMPLE = 1  # sampling number of target speed
 
         # Parameter for the weights for the cost for the individual frenet paths
-        K_J = 0.1                               # Weights for Jerk
-        K_T = 0.1                               # Weights for Time
-        K_D = 100.0                             # Weights for
+        K_J = 0.1  # Weights for Jerk
+        K_T = 0.1  # Weights for Time
+        K_D = 100.0  # Weights for
         K_LAT = 1.0
         K_LON = 1.0
 
@@ -428,19 +514,18 @@ class FrenetPlaner:
 
         # Get current velocity from the optimal raceline file and create the target speed in [m/s]
         s_index = np.argmin(abs(self.csp.s - (s0)))
-        speed_list = self.waypoints[:,5].tolist()
+        speed_list = self.waypoints[:, 5].tolist()
         TARGET_SPEED = speed_list[s_index]
 
         # Get the current Side of the vehicle from the raceline - This is for CLOCKWISE Tracks
         # Side = -1 -> Right Side of the racline \ Side = 1 -> Left Side of the racline
-        a = np.array([self.waypoints[:, 1][s_index-1], self.waypoints[:, 2][s_index-1]])
-        b = np.array([self.waypoints[:, 1][s_index+1], self.waypoints[:, 2][s_index+1]])
+        a = np.array([self.waypoints[:, 1][s_index - 1], self.waypoints[:, 2][s_index - 1]])
+        b = np.array([self.waypoints[:, 1][s_index + 1], self.waypoints[:, 2][s_index + 1]])
         side = np.sign((b[0] - a[0]) * (vehicle_state[1] - a[1]) - (b[1] - a[1]) * (vehicle_state[0] - a[0]))
         c_d = c_d * side * -1
 
         # Calculate variable path width
         # TO DO: Based on the current position of the vehicle calculate all the possible path on the track
-
 
         ########################   Generate Paths for each offset goal
 
@@ -454,7 +539,7 @@ class FrenetPlaner:
                 # lat_qp = quintic_polynomial(c_d, c_d_d, c_d_dd, di, 0.0, 0.0, Ti)
                 lat_qp = QuinticPolynomial(c_d, c_d_d, c_d_dd, di, 0.0, 0.0, Ti)
 
-                #Calculate Later Position
+                # Calculate Later Position
                 fp.t = [t for t in np.arange(0.0, Ti, DT)]
                 fp.d = [lat_qp.calc_point(t) for t in fp.t]
                 # Calculate first derivative of the position: Lateral Veloctiy
@@ -470,7 +555,7 @@ class FrenetPlaner:
                     tfp = copy.deepcopy(fp)
                     lon_qp = QuarticPolynomial(s0, vehicle_state[3], 0.0, tv, 0.0, Ti)
 
-                    #Calculate longitudinal position
+                    # Calculate longitudinal position
                     tfp.s = [lon_qp.calc_point(t) for t in fp.t]
                     # Calculate first derivative of longitudinal position: longitudinal veloctiy
                     tfp.s_d = [lon_qp.calc_first_derivative(t) for t in fp.t]
@@ -498,7 +583,7 @@ class FrenetPlaner:
 
     def calc_global_paths(self, fplist, csp, vehicle_state):
         # Calculating the maximal s-value to make the s=0 transition on the star/finish line
-        s_max = max(self.waypoints[:,[0]])
+        s_max = max(self.waypoints[:, [0]])
 
         # For loop for calculation the global x and y positions
         for fp in fplist:
@@ -533,21 +618,19 @@ class FrenetPlaner:
             for i in range(len(fp.yaw) - 1):
                 fp.c.append((fp.yaw[i + 1] - fp.yaw[i]) / fp.ds[i])
 
-
         return fplist
 
-    def path_planner(self, vehicle_state,  obstacles):
+    def path_planner(self, vehicle_state, obstacles):
 
         # Calculate the cubic spline of the raceline path and create csp object - create it once!
         if self.calcspline == 0:
-            self.csp = cubic_spline_planner.Spline2D(self.waypoints[:,1], self.waypoints[:,2])
+            self.csp = cubic_spline_planner.Spline2D(self.waypoints[:, 1], self.waypoints[:, 2])
             self.calcspline = 1
 
         # Get current position S and distance d to the global raceline
         state = np.stack((vehicle_state[0], vehicle_state[1]), axis=0)
-        #traj = np.stack((self.waypoints[:, 0], self.waypoints[:, 1], self.waypoints[:, 2]), axis=-1)
-        traj = np.stack((self.csp.s, self.csp.sx.y, self.csp.sy.y),axis=-1)
-        self.s0, self.c_d = tph.path_matching_global(traj,state)
+        traj = np.stack((self.csp.s, self.csp.sx.y, self.csp.sy.y), axis=-1)
+        self.s0, self.c_d = tph.path_matching_global(traj, state)
 
         # Calculate the optimal paths in the frenet frame
         fplist = self.calc_frenet_paths(vehicle_state, self.c_d, self.c_d_d, self.c_d_dd, self.s0)
@@ -556,7 +639,7 @@ class FrenetPlaner:
         fplist = self.calc_global_paths(fplist, self.csp, vehicle_state)
 
         # Collision Check: Check if there are obstacles in the way of the path
-        #fplist = self.check_paths(fplist, obstacles)
+        # fplist = self.check_paths(fplist, obstacles)
 
         # Find the path with the minimum cost = optimal path to drive
         min_cost = float("inf")
@@ -574,20 +657,22 @@ class FrenetPlaner:
         #                    DEBUG
         ##########################################
 
-        debugplot=1
+        debugplot = 0
         if debugplot == 1:
             plt.cla()
-            #plt.axis([-40, 2, -10, 10])
-            plt.axis([vehicle_state[0]-10, vehicle_state[0]+8.5, vehicle_state[1]-3.5, vehicle_state[1]+3.5])
-            plt.plot(self.waypoints[:,[1]], self.waypoints[:,[2]], linestyle='solid', linewidth=2, color='#005293')
-            plt.plot(vehicle_state[0],vehicle_state[1], marker='o', color='red')
+            # plt.axis([-40, 2, -10, 10])
+            plt.axis([vehicle_state[0] - 10, vehicle_state[0] + 8.5, vehicle_state[1] - 3.5, vehicle_state[1] + 3.5])
+            plt.plot(self.waypoints[:, [1]], self.waypoints[:, [2]], linestyle='solid', linewidth=2, color='#005293')
+            plt.plot(vehicle_state[0], vehicle_state[1], marker='o', color='red')
             for fp in fplist:
-                plt.plot(fp.x, fp.y,linestyle ='dashed',linewidth=2, color = '#e37222')
+                plt.plot(fp.x, fp.y, linestyle='dashed', linewidth=2, color='#e37222')
 
-            plt.plot(best_path.x,best_path.y,linestyle ='dotted',linewidth=3, color = 'green')
+            plt.plot(best_path.x, best_path.y, linestyle='dotted', linewidth=3, color='green')
             plt.pause(0.001)
             plt.axis('equal')
-
+            self.debug_count = self.debug_count + 1
+            if self.debug_count > 50:
+                test = 0
 
         ###########################################
         #                    DEBUG
@@ -596,24 +681,25 @@ class FrenetPlaner:
         return best_path
 
     def plan(self, pose_x, pose_y, pose_theta, velocity, vgain, timestep):
-        # Define a numpy array that includes the current vehicle state: x-position,y-position, theta, veloctiy
+        # Define a numpy array that includes the current vehicle state (rear axle): x-position,y-position, theta, veloctiy
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
         # Detect Obstacles on the track
-        obstacles = np.array([[20.0, 10.0],[30.0, 6.0]])
+        obstacles = np.array([[20.0, 10.0], [30.0, 6.0]])
 
         # Calculate the optimal path in the frenet frame
         path = self.path_planner(vehicle_state, obstacles)
 
         # Calculate the steering angle and the speed in the controller
-        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.83, 0.50, path)
+        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.23, 0.50, path)
+        steering_angle2 = controller.Stanlycontroller(vehicle_state, path, self.csp, self.s0)
 
-        #print("Current Speed: %2.2f PP Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[-1]))
+        # print("Current Speed: %2.2f PP Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[-1]))
 
         # Use the speed from the Frenet Planer calculation and add a gain to it
-        speed = path.s_d[-1] * 0.50
+        speed = path.s_d[-1] * 0.55
 
-        return speed,steering_angle
+        return speed, steering_angle2
 
 
 if __name__ == '__main__':
@@ -625,7 +711,7 @@ if __name__ == '__main__':
 
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
-    #env.render()
+    env.render()
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = FrenetPlaner(conf, env, 0.17145 + 0.15875)
@@ -638,15 +724,17 @@ if __name__ == '__main__':
     start = time.time()
 
     while not done:
-        speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], work['vgain'],env.timestep)
+        speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0],
+                                    obs['linear_vels_x'][0], work['vgain'], env.timestep)
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        #env.render(mode='human_fast')
+        env.render(mode='human_fast')
 
         if conf_dict['logging'] == 'True':
-            logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
+            logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0],
+                            obs['lap_counts'], speed, steer)
 
     if conf_dict['logging'] == 'True':
         pickle.dump(logging, open("datalogging.p", "wb"))
-    print('Sim elapsed time:', laptime, 'Real elapsed time:', time.time()-start)
+    print('Sim elapsed time:', laptime, 'Real elapsed time:', time.time() - start)
