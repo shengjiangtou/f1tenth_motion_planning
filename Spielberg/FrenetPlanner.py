@@ -403,7 +403,7 @@ class PurePursuitPlanner:
         Returns the optimal steering angle delta is P-Controller with the proportional gain k
         """
 
-        k_path = 15.33010407  # Proportional gain for path control
+        k_path = 6.33010407  # Proportional gain for path control
         theta_e, ef = self.calc_theta_and_ef(vehicle_state, local_path, global_path, s_position)
 
         # Caculate steering angle based on the cross track error to the front axle in [rad]
@@ -440,6 +440,7 @@ class FrenetPlaner:
         self.s0 = 0.0  # current course position s in the Frenet Frame
         self.calcspline = 0
         self.csp = 0
+        self.last_best_bath = []
         self.debug_count = 0  # DEBUG - Counts
         self.debug_array1 = []  # DEBUG - array for saving numbers
         self.debug_array2 = []  # DEBUG - array for saving numbers
@@ -454,7 +455,7 @@ class FrenetPlaner:
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
     def check_collision(self, fp, ob):
-        ROBOT_RADIUS = 0.3  # robot radius [m]
+        ROBOT_RADIUS = 0.5  # robot radius [m]
 
         for i in range(len(ob[:, 0])):
             d = [((ix - ob[i, 0]) ** 2 + (iy - ob[i, 1]) ** 2)
@@ -468,20 +469,28 @@ class FrenetPlaner:
         return True
 
     def check_paths(self, fplist, ob):
-        MAX_SPEED = 12.0  # maximum speed [m/s]
-        MAX_ACCEL = 8.0  # maximum acceleration [m/ss]
-        MAX_CURVATURE = 1.0  # maximum curvature [1/m]
+        MAX_SPEED = 11.0            # Maximum vehicle speed [m/s]
+        MAX_ACCEL = 9.5             # Maximum longitudinal acceleration [m/ss]
+        MAX_CURVATURE = 1.0         # Maximum driveable curvature [1/m]
 
         ok_ind = []
         for i, _ in enumerate(fplist):
-            if any([v > MAX_SPEED for v in fplist[i].s_d]):  # Max speed check
+            # Max speed check: Check if the veloctiy in this trajectory is higher than the max. vel. of the vehicle
+            if any([v > MAX_SPEED for v in fplist[i].s_d]):
                 continue
+
+            # Max Lat. Acceleration check: Check if the Lat. Acc. in this trajectory is higher than the max. acc. of the vehicle
             elif any([abs(a) > MAX_ACCEL for a in
                       fplist[i].s_dd]):  # Max accel check
                 continue
+                print('no ACC violation in the paths')
+                
+            # Max Curvature check: Check if the curvature in this trajectory is higher than possible driveable curvature of the vehicle
             elif any([abs(c) > MAX_CURVATURE for c in
                       fplist[i].c]):  # Max curvature check
                 continue
+
+            # Obstacle Collision Check: Check which of the paths are interferring with an obstacle
             elif not self.check_collision(fplist[i], ob):
                 continue
 
@@ -494,14 +503,14 @@ class FrenetPlaner:
         #############################      Define  Parameter
 
         # Parameter for the path creation
-        MAX_PATH_WIDTH_LEFT = -1.00  # maximum planning with to the left [m]
-        MAX_PATH_WIDTH_RIGHT = 1.00  # maximum planning with to the right [m]
-        D_ROAD_W = 0.25  # road width sampling length [m]
-        MAX_T = 1.5  # max prediction time [m]
-        MIN_T = 1.0  # min prediction time [m]
-        DT = 0.2  # Sampling time in s
-        D_T_S = 0.25  # target speed sampling length [m/s]
-        N_S_SAMPLE = 1  # sampling number of target speed
+        MAX_PATH_WIDTH_LEFT = -0.0         # Maximum planning with to the left [m]
+        MAX_PATH_WIDTH_RIGHT = 1.50         # Maximum planning with to the right [m]
+        D_ROAD_W = 0.20                     # Sampling length along the width of the track [m]
+        MAX_T = 1.5                         # Max prediction time for the path horizon [m]
+        MIN_T = 1.0                         # Min prediction time for the path horizon [m]
+        DT = 0.2                            # Sampling time [s]
+        D_T_S = 0.10                        # Target speed sampling length [m/s]
+        N_S_SAMPLE = 1                      # Sampling number of target speed
 
         # Parameter for the weights for the cost for the individual frenet paths
         K_J = 0.1  # Weights for Jerk
@@ -632,7 +641,7 @@ class FrenetPlaner:
             self.csp = cubic_spline_planner.Spline2D(self.waypoints[:, 1], self.waypoints[:, 2])
             self.calcspline = 1
 
-        # Get current position S and distance d to the global raceline
+        # Get current position S on the raceline and distance d to the global raceline
         state = np.stack((vehicle_state[0], vehicle_state[1]), axis=0)
         traj = np.stack((self.csp.s, self.csp.sx.y, self.csp.sy.y), axis=-1)
         self.s0, self.c_d = tph.path_matching_global(traj, state)
@@ -643,8 +652,8 @@ class FrenetPlaner:
         # Calculate the one optimal path based closest to the global path (raceline)
         fplist = self.calc_global_paths(fplist, self.csp, vehicle_state)
 
-        # Collision Check: Check if there are obstacles in the way of the path
-        # fplist = self.check_paths(fplist, obstacles)
+        # Reliability and Collision Check: Select the paths that make sense
+        fplist = self.check_paths(fplist, obstacles)
 
         # Find the path with the minimum cost = optimal path to drive
         min_cost = float("inf")
@@ -654,7 +663,13 @@ class FrenetPlaner:
                 min_cost = fp.cf
                 best_path = fp
 
+        # Check if best_path was found - if not use the last path found and use this one as control input
+        if not best_path:
+            print("No path found")
+            best_path = self.last_best_bath
+
         # Update additional paramter
+        self.last_best_bath = best_path
         self.c_d_d = best_path.d_d[1]
         self.c_d_dd = best_path.d_dd[1]
 
@@ -705,7 +720,7 @@ class FrenetPlaner:
         # print("Current Speed: %2.2f PP Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[-1]))
 
         # Use the speed from the Frenet Planer calculation and add a gain to it
-        speed = path.s_d[-1] * 0.54
+        speed = path.s_d[-1] * 0.40
 
         return speed, steering_angle
 
@@ -719,7 +734,7 @@ if __name__ == '__main__':
 
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
-    env.render()
+    #env.render()
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = FrenetPlaner(conf, env, 0.17145 + 0.15875)
@@ -737,7 +752,7 @@ if __name__ == '__main__':
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        env.render(mode='human_fast')
+        #env.render(mode='human_fast')
 
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0],
