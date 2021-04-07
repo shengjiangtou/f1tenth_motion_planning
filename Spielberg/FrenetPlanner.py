@@ -662,7 +662,7 @@ class FrenetPlaner:
         #                    DEBUG
         ##########################################
 
-        debugplot = 0
+        debugplot = 1
         if debugplot == 1:
             plt.cla()
             # plt.axis([-40, 2, -10, 10])
@@ -671,6 +671,9 @@ class FrenetPlaner:
             plt.plot(vehicle_state[0], vehicle_state[1], marker='o', color='red')
             for fp in fplist:
                 plt.plot(fp.x, fp.y, linestyle='dashed', linewidth=2, color='#e37222')
+
+            for obs in obstacles:
+                plt.plot(obs[0], obs[1],  marker='*', color='magenta')
 
             plt.plot(best_path.x, best_path.y, linestyle='dotted', linewidth=3, color='green')
             plt.pause(0.001)
@@ -690,21 +693,21 @@ class FrenetPlaner:
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
         # Detect Obstacles on the track
-        obstacles = np.array([[20.0, 10.0], [30.0, 6.0]])
+        obstacles = np.array([[-9.5, -3.4], [-11.5, -3.7]])
 
         # Calculate the optimal path in the frenet frame
         path = self.path_planner(vehicle_state, obstacles)
 
         # Calculate the steering angle and the speed in the controller
-        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.23, 0.50, path)
-        steering_angle2 = controller.Stanlycontroller(vehicle_state, path, self.csp, self.s0)
+        # speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.23, 0.50, path)
+        steering_angle = controller.Stanlycontroller(vehicle_state, path, self.csp, self.s0)
 
         # print("Current Speed: %2.2f PP Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[-1]))
 
         # Use the speed from the Frenet Planer calculation and add a gain to it
         speed = path.s_d[-1] * 0.54
 
-        return speed, steering_angle2
+        return speed, steering_angle
 
 
 if __name__ == '__main__':
