@@ -403,7 +403,7 @@ class PurePursuitPlanner:
         Returns the optimal steering angle delta is P-Controller with the proportional gain k
         """
 
-        k_path = 13.33010407  # Proportional gain for path control
+        k_path = 15.33010407  # Proportional gain for path control
         theta_e, ef = self.calc_theta_and_ef(vehicle_state, local_path, global_path, s_position)
 
         # Caculate steering angle based on the cross track error to the front axle in [rad]
@@ -519,8 +519,13 @@ class FrenetPlaner:
 
         # Get the current Side of the vehicle from the raceline - This is for CLOCKWISE Tracks
         # Side = -1 -> Right Side of the racline \ Side = 1 -> Left Side of the racline
-        a = np.array([self.waypoints[:, 1][s_index - 1], self.waypoints[:, 2][s_index - 1]])
-        b = np.array([self.waypoints[:, 1][s_index + 1], self.waypoints[:, 2][s_index + 1]])
+        if s_index == self.waypoints.shape[0]-1:
+            a = np.array([self.waypoints[:, 1][s_index - 1], self.waypoints[:, 2][s_index - 1]])
+            b = np.array([self.waypoints[:, 1][1], self.waypoints[:, 2][1]])
+        else:
+            a = np.array([self.waypoints[:, 1][s_index - 1], self.waypoints[:, 2][s_index - 1]])
+            b = np.array([self.waypoints[:, 1][s_index + 1], self.waypoints[:, 2][s_index + 1]])
+
         side = np.sign((b[0] - a[0]) * (vehicle_state[1] - a[1]) - (b[1] - a[1]) * (vehicle_state[0] - a[0]))
         c_d = c_d * side * -1
 
@@ -697,7 +702,7 @@ class FrenetPlaner:
         # print("Current Speed: %2.2f PP Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[-1]))
 
         # Use the speed from the Frenet Planer calculation and add a gain to it
-        speed = path.s_d[-1] * 0.55
+        speed = path.s_d[-1] * 0.54
 
         return speed, steering_angle2
 
