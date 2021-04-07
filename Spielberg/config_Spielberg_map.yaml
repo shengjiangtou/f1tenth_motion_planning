@@ -17,9 +17,9 @@ map_ext: '.png'
 # T5 (Wuerth):
 # T7 (Rindt):
 # Middle section: -51.7582509;52.9369422;6.1060188;
-sx: -51.7582509
-sy: 52.3369422
-stheta: 6.1060188
+sx: -0.0440806
+sy: -0.8491629
+stheta: 3.4034118
 
 sx2: 1.3079426
 sy2: -0.4869018
@@ -32,6 +32,7 @@ stheta3: 3.4
 
 # raceline path and indices
 wpt_path: './Spielberg_raceline.csv'
+wpt_path2: './Spielberg_centerline.csv'
 wpt_delim: ';'
 wpt_rowskip: 3
 wpt_xind: 1

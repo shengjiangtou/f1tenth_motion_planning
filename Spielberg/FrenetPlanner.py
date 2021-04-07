@@ -367,7 +367,6 @@ class FrenetPlaner:
 
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
-
     def check_collision(self, fp, ob):
         ROBOT_RADIUS = 0.3                  # robot radius [m]
 
@@ -408,16 +407,18 @@ class FrenetPlaner:
 
         #############################      Define  Parameter
 
-        # Paramter for the path creation
-        MAX_ROAD_WIDTH = 1.00           # maximum road width [m]
-        D_ROAD_W = 0.5                  # road width sampling length [m]
+        # Parameter for the path creation
+        MAX_PATH_WIDTH_LEFT = -1.00           # maximum planning with to the left [m]
+        MAX_PATH_WIDTH_RIGHT = 1.00          # maximum planning with to the right [m]
+
+        D_ROAD_W = 0.25                  # road width sampling length [m]
         MAX_T = 1.5                     # max prediction time [m]
         MIN_T = 1.25                    # min prediction time [m]
         DT = 0.2                        # Sampling time in s
         D_T_S = 0.25                    # target speed sampling length [m/s]
         N_S_SAMPLE = 1                  # sampling number of target speed
 
-        # Paramter for the weights for the cost for the individual frenet paths
+        # Parameter for the weights for the cost for the individual frenet paths
         K_J = 0.1                       # Weights for Jerk
         K_T = 0.1                       # Weights for Time
         K_D = 100.0                     # Weights for
@@ -426,7 +427,7 @@ class FrenetPlaner:
 
         #############################      Precalculations
 
-        # Get current Velocity from the optimal raceline file and create the target speed in [m/s]
+        # Get current velocity from the optimal raceline file and create the target speed in [m/s]
         s_index = np.argmin(abs(self.csp.s - (s0)))
         speed_list = self.waypoints[:,5].tolist()
         TARGET_SPEED = speed_list[s_index]
@@ -438,11 +439,13 @@ class FrenetPlaner:
         side = np.sign((b[0] - a[0]) * (vehicle_state[1] - a[1]) - (b[1] - a[1]) * (vehicle_state[0] - a[0]))
         c_d = c_d * side * -1
 
+        # Calculate variable path width
 
-        ######################## Generate Paths for each offset goal
+
+        ########################   Generate Paths for each offset goal
 
         frenet_paths = []
-        for di in np.arange(-MAX_ROAD_WIDTH, MAX_ROAD_WIDTH, D_ROAD_W):
+        for di in np.arange(MAX_PATH_WIDTH_LEFT, MAX_PATH_WIDTH_RIGHT, D_ROAD_W):
 
             # Lateral motion planning
             for Ti in np.arange(MIN_T, MAX_T, DT):
@@ -567,12 +570,11 @@ class FrenetPlaner:
         self.c_d_d = best_path.d_d[1]
         self.c_d_dd = best_path.d_dd[1]
 
-
         ###########################################
         #                    DEBUG
         ##########################################
 
-        debugplot=1
+        debugplot=0
         if debugplot == 1:
             plt.cla()
             #plt.axis([-40, 2, -10, 10])
@@ -604,12 +606,12 @@ class FrenetPlaner:
         path = self.path_planner(vehicle_state, obstacles)
 
         # Calculate the steering angle and the speed in the controller
-        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 1.45, 0.50, path)
+        speed, steering_angle = controller.plan(pose_x, pose_y, pose_theta, 0.83, 0.50, path)
 
         #print("Current Speed: %2.2f PP Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[-1]))
 
         # Use the speed from the Frenet Planer calculation and add a gain to it
-        speed = path.s_d[-1] * 0.80
+        speed = path.s_d[-1] * 0.50
 
         return speed,steering_angle
 
@@ -623,7 +625,7 @@ if __name__ == '__main__':
 
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
-    #env.render()
+    env.render()
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = FrenetPlaner(conf, env, 0.17145 + 0.15875)
@@ -640,7 +642,7 @@ if __name__ == '__main__':
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        #env.render(mode='human_fast')
+        env.render(mode='human_fast')
 
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
