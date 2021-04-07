@@ -408,20 +408,19 @@ class FrenetPlaner:
         #############################      Define  Parameter
 
         # Parameter for the path creation
-        MAX_PATH_WIDTH_LEFT = -1.00           # maximum planning with to the left [m]
-        MAX_PATH_WIDTH_RIGHT = 1.00          # maximum planning with to the right [m]
-
-        D_ROAD_W = 0.25                  # road width sampling length [m]
-        MAX_T = 1.5                     # max prediction time [m]
-        MIN_T = 1.25                    # min prediction time [m]
-        DT = 0.2                        # Sampling time in s
-        D_T_S = 0.25                    # target speed sampling length [m/s]
-        N_S_SAMPLE = 1                  # sampling number of target speed
+        MAX_PATH_WIDTH_LEFT = -1.00             # maximum planning with to the left [m]
+        MAX_PATH_WIDTH_RIGHT = 1.00             # maximum planning with to the right [m]
+        D_ROAD_W = 0.25                         # road width sampling length [m]
+        MAX_T = 1.5                             # max prediction time [m]
+        MIN_T = 1.0                             # min prediction time [m]
+        DT = 0.2                                # Sampling time in s
+        D_T_S = 0.25                            # target speed sampling length [m/s]
+        N_S_SAMPLE = 1                          # sampling number of target speed
 
         # Parameter for the weights for the cost for the individual frenet paths
-        K_J = 0.1                       # Weights for Jerk
-        K_T = 0.1                       # Weights for Time
-        K_D = 100.0                     # Weights for
+        K_J = 0.1                               # Weights for Jerk
+        K_T = 0.1                               # Weights for Time
+        K_D = 100.0                             # Weights for
         K_LAT = 1.0
         K_LON = 1.0
 
@@ -440,6 +439,7 @@ class FrenetPlaner:
         c_d = c_d * side * -1
 
         # Calculate variable path width
+        # TO DO: Based on the current position of the vehicle calculate all the possible path on the track
 
 
         ########################   Generate Paths for each offset goal
@@ -574,11 +574,11 @@ class FrenetPlaner:
         #                    DEBUG
         ##########################################
 
-        debugplot=0
+        debugplot=1
         if debugplot == 1:
             plt.cla()
             #plt.axis([-40, 2, -10, 10])
-            plt.axis([vehicle_state[0]-7.5, vehicle_state[0]+7.5, vehicle_state[1]-3.5, vehicle_state[1]+3.5])
+            plt.axis([vehicle_state[0]-10, vehicle_state[0]+8.5, vehicle_state[1]-3.5, vehicle_state[1]+3.5])
             plt.plot(self.waypoints[:,[1]], self.waypoints[:,[2]], linestyle='solid', linewidth=2, color='#005293')
             plt.plot(vehicle_state[0],vehicle_state[1], marker='o', color='red')
             for fp in fplist:
@@ -625,7 +625,7 @@ if __name__ == '__main__':
 
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
-    env.render()
+    #env.render()
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = FrenetPlaner(conf, env, 0.17145 + 0.15875)
@@ -642,7 +642,7 @@ if __name__ == '__main__':
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        env.render(mode='human_fast')
+        #env.render(mode='human_fast')
 
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
