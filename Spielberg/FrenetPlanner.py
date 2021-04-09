@@ -469,7 +469,7 @@ class FrenetPlaner:
 
         # Iteration over X,Y and Yaw at the same time in this zip-for-loop
         for ix, iy, iyaw in zip(x, y, yaw):
-            d = 0.25                                            # Addtional safety distance around
+            d = 0.30                                            # Addtional safety distance around
             dl = (RF - RB) / 2.0                               # Distance to
             r = math.hypot((RF + RB) / 2.0, W / 2.0) + d       # Safety radius for the vehicle around middle point of vehicle
 
@@ -482,12 +482,9 @@ class FrenetPlaner:
                 dx = xo * math.cos(iyaw) + yo * math.sin(iyaw)      # x-Distance to object
                 dy = -xo * math.sin(iyaw) + yo * math.cos(iyaw)     # Y-Distance to object
 
-
-
                 # Check if safety distances are violated: dx < 1.3, dy < 1.15
                 if abs(dx) < r and abs(dy) < W / 2 + d:
-                    print ("DANGER: Obstacle in the way")
-                    return False
+                    return 500
 
         return True
 
@@ -530,8 +527,11 @@ class FrenetPlaner:
 
             # Obstacle Collision Check: Check which of the paths are interferring with an obstacle
             #elif not self.check_collision(fplist[i], ob):
-            elif not self.is_path_collision(fplist[i], ob):
+            #elif not self.is_path_collision(fplist[i], ob):
+            if self.is_path_collision(fplist[i], ob) == 500:
                 path_check = 'no path found because of OBSTACLES'
+                fplist[i].cf = fplist[i].cf + 500
+                ok_ind.append(i)
                 continue
 
 
@@ -547,12 +547,12 @@ class FrenetPlaner:
         #############################      Define  Parameter
 
         # Parameter for the path creation
-        MAX_PATH_WIDTH_LEFT = -0.2         # Maximum planning with to the left [m]
+        MAX_PATH_WIDTH_LEFT = -0.00         # Maximum planning with to the left [m]
         MAX_PATH_WIDTH_RIGHT = 1.50         # Maximum planning with to the right [m]
-        D_ROAD_W = 0.20                     # Sampling length along the width of the track [m]
+        D_ROAD_W = 0.25                     # Sampling length along the width of the track [m]
         MAX_T = 1.5                         # Max prediction time for the path horizon [m]
-        MIN_T = 1.0                         # Min prediction time for the path horizon [m]
-        DT = 0.1                            # Sampling time [s]
+        MIN_T = 1.3                         # Min prediction time for the path horizon [m]
+        DT = 0.2                            # Sampling time [s]
         D_T_S = 0.10                        # Target speed sampling length [m/s]
         N_S_SAMPLE = 1                      # Sampling number of target speed
 
@@ -561,7 +561,7 @@ class FrenetPlaner:
         K_T = 0.1           # Weights for Time
         K_D = 100.0         # Weights for
         K_LAT = 1.0
-        K_LON = 1.0
+        K_LON = 50.0
 
         #############################      Precalculations
 
@@ -720,7 +720,7 @@ class FrenetPlaner:
         #                    DEBUG
         ##########################################
 
-        debugplot = 1
+        debugplot = 0
         if debugplot == 1:
             plt.cla()
             # plt.axis([-40, 2, -10, 10])
@@ -783,7 +783,7 @@ if __name__ == '__main__':
 
     env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
-    #env.render()
+    env.render()
 
     # Creating the Motion planner object that is used in the F1TENTH Gym
     planner = FrenetPlaner(conf, env, 0.17145 + 0.15875)
@@ -801,7 +801,7 @@ if __name__ == '__main__':
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        #env.render(mode='human_fast')
+        env.render(mode='human_fast')
 
         if conf_dict['logging'] == 'True':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0],
