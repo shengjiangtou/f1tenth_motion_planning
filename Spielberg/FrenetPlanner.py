@@ -423,33 +423,31 @@ class FrenetPlaner:
 
     - [Optimal trajectory generation for dynamic street scenarios in a Frenet Frame]
     (https://www.youtube.com/watch?v=Cj6tAQe7UCY)
-
     """
 
     def __init__(self, conf, env, wb):
-        self.wheelbase = wb  # Wheelbase of the vehicle
-        self.conf = conf  # Current configuration for the gym based on the maps
-        self.env = env  # Current environment parameter
-        self.load_waypoints(conf)  # Waypoints of the raceline
+        self.wheelbase = wb                     # Wheelbase of the vehicle
+        self.conf = conf                        # Current configuration for the gym based on the maps
+        self.env = env                          # Current environment parameter
+        self.load_waypoints(conf)               # Waypoints of the raceline
         self.max_reacquire = 20.
-        self.c_d = 0.0  # current lateral position in the Frenet Frame [m]
-        self.c_d_d = 0.0  # current lateral speed in the Frenet Frame [m/s]
-        self.c_d_dd = 0.0  # current lateral acceleration in the Frenet Frame [m/s]
-        self.s0 = 0.0  # current course position s in the Frenet Frame
+        self.c_d = 0.0                          # current lateral position in the Frenet Frame [m]
+        self.c_d_d = 0.0                        # current lateral speed in the Frenet Frame [m/s]
+        self.c_d_dd = 0.0                       # current lateral acceleration in the Frenet Frame [m/s]
+        self.s0 = 0.0                           # current course position s in the Frenet Frame
         self.calcspline = 0
         self.csp = 0
         self.last_best_bath = []
-        self.debug_count = 0  # DEBUG - Counts
-        self.debug_array1 = []  # DEBUG - array for saving numbers
-        self.debug_array2 = []  # DEBUG - array for saving numbers
-        self.debug_array3 = []  # DEBUG - array for saving numbers
-        self.debug_array4 = []  # DEBUG - array for saving numbers
+        self.debug_count = 0                    # DEBUG - Counts
+        self.debug_array1 = []                  # DEBUG - array for saving numbers
+        self.debug_array2 = []                  # DEBUG - array for saving numbers
+        self.debug_array3 = []                  # DEBUG - array for saving numbers
+        self.debug_array4 = []                  # DEBUG - array for saving numbers
 
     def load_waypoints(self, conf):
         """
         Loading the x and y waypoints in the "..._raceline.csv" which includes the path to follow
         """
-
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
     def is_path_collision(self, path, obs):
@@ -458,14 +456,13 @@ class FrenetPlaner:
         RB = 0.105                         # Distance from rear axle back end of vehicle [m]
         W = self.env.params['width']       # Width of vehicle [m]
 
-        # Get the length of the X-Y position vector but select only every 5th point to reduce the calculation
+        # Get the length of the X-Y position vector but select only every Xth point to reduce the calculation
         index = range(0, len(path.x))
 
-        # Extract every 5th point from X andy y position and yaw and safe them in a seperate vector
+        # Extract every Xth point from X andy y position and yaw and safe them in a seperate vector
         x = [path.x[i] for i in index]
         y = [path.y[i] for i in index]
         yaw = [path.yaw[i] for i in index]
-
 
         # Iteration over X,Y and Yaw at the same time in this zip-for-loop
         for ix, iy, iyaw in zip(x, y, yaw):
@@ -481,6 +478,13 @@ class FrenetPlaner:
                 yo = obs[i][1] - cy        # Calculate new obstacle position
                 dx = xo * math.cos(iyaw) + yo * math.sin(iyaw)      # x-Distance to object
                 dy = -xo * math.sin(iyaw) + yo * math.cos(iyaw)     # Y-Distance to object
+
+                #if self.debug_count > 2500:
+                    #plt.plot(x, y, linestyle='solid', color='black')
+                    #.plot(ix, iy, marker='o', color='green')
+                    #plt.plot(cx, cy, marker='o', color='red')
+                    #plt.axis([-15, -5, -7, -2])
+                    #plt.axis('equal')
 
                 # Check if safety distances are violated: dx < 1.3, dy < 1.15
                 if abs(dx) < r and abs(dy) < W / 2 + d:
@@ -498,7 +502,6 @@ class FrenetPlaner:
             collision = any([di <= ROBOT_RADIUS ** 2 for di in d])
 
             if collision:
-                plt.plot(fp.x, fp.y, linestyle="solid", color='red')
                 return False
 
         return True
@@ -530,21 +533,23 @@ class FrenetPlaner:
             #elif not self.is_path_collision(fplist[i], ob):
             if self.is_path_collision(fplist[i], ob) == 500:
                 path_check = 'no path found because of OBSTACLES'
-                fplist[i].cf = fplist[i].cf + 500
+                fplist[i].cf = fplist[i].cf +1500
                 ok_ind.append(i)
                 continue
 
-
+            # If a good path was found add the index of this path to a list
             ok_ind.append(i)
 
+        # If no path was found print out the statement for the violation of the constraint
         if not ok_ind:
             print (path_check)
+
 
         return [fplist[i] for i in ok_ind]
 
     def calc_frenet_paths(self, vehicle_state, c_d, c_d_d, c_d_dd, s0):
 
-        #############################      Define  Parameter
+        #############################      Define  Parameter        #############################################
 
         # Parameter for the path creation
         MAX_PATH_WIDTH_LEFT = -0.00         # Maximum planning with to the left [m]
@@ -559,11 +564,11 @@ class FrenetPlaner:
         # Parameter for the weights for the cost for the individual frenet paths
         K_J = 0.1           # Weights for Jerk
         K_T = 0.1           # Weights for Time
-        K_D = 100.0         # Weights for
-        K_LAT = 1.0
-        K_LON = 50.0
+        K_D = 100.0         # Weights for Deviation from the global, optimal raceline
+        K_LAT = 1.0         # Weights for
+        K_LON = 50.0        # Weights for
 
-        #############################      Precalculations
+        #############################      Precalculations         #############################################
 
         # Get current velocity from the optimal raceline file and create the target speed in [m/s]
         s_index = np.argmin(abs(self.csp.s - (s0)))
@@ -585,7 +590,7 @@ class FrenetPlaner:
         # Calculate variable path width
         # TO DO: Based on the current position of the vehicle calculate all the possible path on the track
 
-        ########################   Generate Paths for each offset goal
+        ########################      Generate Paths for each offset goal       #####################################
 
         frenet_paths = []
         for di in np.arange(MAX_PATH_WIDTH_LEFT, MAX_PATH_WIDTH_RIGHT, D_ROAD_W):
@@ -693,7 +698,7 @@ class FrenetPlaner:
         # Calculate the optimal paths in the frenet frame
         fplist = self.calc_frenet_paths(vehicle_state, self.c_d, self.c_d_d, self.c_d_dd, self.s0)
 
-        # Calculate the one optimal path based closest to the global path (raceline)
+        # Transfer all Frenet Paths into the global coordination frame X-Y-Theta
         fplist = self.calc_global_paths(fplist, self.csp, vehicle_state)
 
         # Reliability and Collision Check: Select the paths that make sense
@@ -769,7 +774,7 @@ class FrenetPlaner:
         # print("Current Speed: %2.2f PP Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[-1]))
 
         # Use the speed from the Frenet Planer calculation and add a gain to it
-        speed = path.s_d[-1] * 0.40
+        speed = path.s_d[-1] * 0.50
 
         return speed, steering_angle
 
