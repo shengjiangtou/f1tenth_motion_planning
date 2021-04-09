@@ -190,7 +190,7 @@ class Datalogger:
 
 if __name__ == '__main__':
 
-    work = {'mass': 3.97611187, 'lf': 0.16934925, 'tlad': 0.82461887897713965, 'vgain': 0.90439957}
+    work = {'mass': 3.97611187, 'lf': 0.16934925, 'tlad': 0.82461887897713965, 'vgain': 0.20439957}
     with open('config_Spielberg_map.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
@@ -213,7 +213,7 @@ if __name__ == '__main__':
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
-        env.render(mode='human_fast')
+        env.render(mode='human')
 
         #Loggin Statement: If True logging is done
         if conf_dict['logging'] == 'True':

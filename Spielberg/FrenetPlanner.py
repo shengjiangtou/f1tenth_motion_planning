@@ -452,6 +452,45 @@ class FrenetPlaner:
 
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
+    def is_path_collision(self, path, obs):
+        # Vehicle Parameter
+        RF = 0.430                         # Distance from rear axle front end of vehicle [m]
+        RB = 0.105                         # Distance from rear axle back end of vehicle [m]
+        W = self.env.params['width']       # Width of vehicle [m]
+
+        # Get the length of the X-Y position vector but select only every 5th point to reduce the calculation
+        index = range(0, len(path.x))
+
+        # Extract every 5th point from X andy y position and yaw and safe them in a seperate vector
+        x = [path.x[i] for i in index]
+        y = [path.y[i] for i in index]
+        yaw = [path.yaw[i] for i in index]
+
+
+        # Iteration over X,Y and Yaw at the same time in this zip-for-loop
+        for ix, iy, iyaw in zip(x, y, yaw):
+            d = 0.25                                            # Addtional safety distance around
+            dl = (RF - RB) / 2.0                               # Distance to
+            r = math.hypot((RF + RB) / 2.0, W / 2.0) + d       # Safety radius for the vehicle around middle point of vehicle
+
+            cx = ix + dl * math.cos(iyaw)  # Calculate front x-position of the vehicle
+            cy = iy + dl * math.sin(iyaw)  # Calculate front y-position of the vehicle
+
+            for i in range(len(obs)):
+                xo = obs[i][0] - cx        # Calculate new obstacle position
+                yo = obs[i][1] - cy        # Calculate new obstacle position
+                dx = xo * math.cos(iyaw) + yo * math.sin(iyaw)      # x-Distance to object
+                dy = -xo * math.sin(iyaw) + yo * math.cos(iyaw)     # Y-Distance to object
+
+
+
+                # Check if safety distances are violated: dx < 1.3, dy < 1.15
+                if abs(dx) < r and abs(dy) < W / 2 + d:
+                    print ("DANGER: Obstacle in the way")
+                    return False
+
+        return True
+
     def check_collision(self, fp, ob):
         ROBOT_RADIUS = 0.5  # robot radius [m]
 
@@ -490,7 +529,8 @@ class FrenetPlaner:
                 continue
 
             # Obstacle Collision Check: Check which of the paths are interferring with an obstacle
-            elif not self.check_collision(fplist[i], ob):
+            #elif not self.check_collision(fplist[i], ob):
+            elif not self.is_path_collision(fplist[i], ob):
                 path_check = 'no path found because of OBSTACLES'
                 continue
 
@@ -507,7 +547,7 @@ class FrenetPlaner:
         #############################      Define  Parameter
 
         # Parameter for the path creation
-        MAX_PATH_WIDTH_LEFT = -0.0         # Maximum planning with to the left [m]
+        MAX_PATH_WIDTH_LEFT = -0.2         # Maximum planning with to the left [m]
         MAX_PATH_WIDTH_RIGHT = 1.50         # Maximum planning with to the right [m]
         D_ROAD_W = 0.20                     # Sampling length along the width of the track [m]
         MAX_T = 1.5                         # Max prediction time for the path horizon [m]
@@ -557,7 +597,7 @@ class FrenetPlaner:
                 # lat_qp = quintic_polynomial(c_d, c_d_d, c_d_dd, di, 0.0, 0.0, Ti)
                 lat_qp = QuinticPolynomial(c_d, c_d_d, c_d_dd, di, 0.0, 0.0, Ti)
 
-                # Calculate Later Position
+                # Calculate Lateral Position
                 fp.t = [t for t in np.arange(0.0, Ti, DT)]
                 fp.d = [lat_qp.calc_point(t) for t in fp.t]
                 # Calculate first derivative of the position: Lateral Veloctiy
@@ -692,12 +732,11 @@ class FrenetPlaner:
 
             for obs in obstacles:
                 plt.plot(obs[0], obs[1],  marker='*', color='black')
-                plt.plot(obs[0], obs[1]+0.5, marker='*', color='magenta')
-                plt.plot(obs[0]-0.35, obs[1]+0.35, marker='*', color='magenta')
-                plt.plot(obs[0]-0.5, obs[1], marker='*', color='magenta')
-                plt.plot(obs[0]+0.35, obs[1]+0.35, marker='*', color='magenta')
-                plt.plot(obs[0]+ 0.5, obs[1] , marker='*', color='magenta')
-
+                #plt.plot(obs[0], obs[1]+0.5, marker='*', color='magenta')
+                #plt.plot(obs[0]-0.35, obs[1]+0.35, marker='*', color='magenta')
+                #plt.plot(obs[0]-0.5, obs[1], marker='*', color='magenta')
+                #plt.plot(obs[0]+0.35, obs[1]+0.35, marker='*', color='magenta')
+                #plt.plot(obs[0]+ 0.5, obs[1] , marker='*', color='magenta')
 
             plt.plot(best_path.x, best_path.y, linestyle='dotted', linewidth=3, color='green')
             plt.pause(0.001)
