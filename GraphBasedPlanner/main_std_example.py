@@ -95,7 +95,8 @@ zone_example = {'sample_zone': [[64, 64, 64, 64, 64, 64, 64, 65, 65, 65, 65, 65,
 traj_set = {'straight': None}
 tic = time.time()
 
-while True:
+class GraphBasedPlanner:
+
     # -- SELECT ONE OF THE PROVIDED TRAJECTORIES -----------------------------------------------------------------------
     # (here: brute-force, replace by sophisticated behavior planner)
     for sel_action in ["right", "left", "straight", "follow"]:  # try to force 'right', else try next in list
@@ -132,4 +133,28 @@ while True:
     ltpl_obj.log()
 
     # -- LIVE PLOT (if activated - not recommended for performance use) ------------------------------------------------
-    ltpl_obj.visual()
+    #ltpl_obj.visual()
+
+if __name__ == '__main__':
+
+    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.9038203837889}
+    with open('config_Spielberg_map.yaml') as file:
+        conf_dict = yaml.load(file, Loader=yaml.FullLoader)
+    conf = Namespace(**conf_dict)
+
+    env = gym.make('f110_gym:f110-v0', map=conf.map_path, map_ext=conf.map_ext, num_agents=1)
+    obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
+    env.render()
+    planner = PurePursuitPlanner(conf, 0.17145+0.15875)
+
+    laptime = 0.0
+    start = time.time()
+
+    while not done:
+        speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], work['tlad'], obs['linear_vels_x'][0], work['vgain'])
+
+        obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
+        laptime += step_reward
+        env.render(mode='human_fast')
+    print("Racetrack")
+    print('Sim elapsed time:', laptime, 'Real elapsed time:', time.time()-start)
