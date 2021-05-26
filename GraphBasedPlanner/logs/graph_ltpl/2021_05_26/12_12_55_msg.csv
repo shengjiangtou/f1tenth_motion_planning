@@ -1,3 +1,0 @@
-time;type;message
-1622056421.7593758;INFO;Received new zone object with ID sample_zone!
-1622056421.914444;WARNING;Warning: One trajectory generation iteration took more than 0.150s (Actual calculation time: 0.155s)

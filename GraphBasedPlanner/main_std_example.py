@@ -327,7 +327,7 @@ class GraphBasedPlanner:
         #heading_est = np.arctan2(np.diff(refline[0:2, 1]), np.diff(refline[0:2, 0])) - np.pi / 2
 
         pos_est = np.array([self.conf.sx, self.conf.sy])
-        heading_est = self.conf.stheta
+        heading_est = np.array([round (self.conf.stheta - math.pi/2, 7)])
 
         # set start pos
         ltpl_obj.set_startpos(pos_est=pos_est,
@@ -395,15 +395,16 @@ class GraphBasedPlanner:
 
         # -- SEND TRAJECTORIES TO CONTROLLER -------------------------------------------------------------------------------
         # select a trajectory from the set and send it to the controller here
-        speed = traj_set['straight'][0][0][6]
-        print(speed)
+        speed = traj_set['straight'][0][10][5]
         steering_angle = 0
+
+        # -- LIVE PLOT (if activated - not recommended for performance use) ------------------------------------------------
+        #self.ltpl_obj.visual()
 
         # -- LOGGING -------------------------------------------------------------------------------------------------------
         self.ltpl_obj.log()
 
         return speed, steering_angle
-
 
 if __name__ == '__main__':
 
