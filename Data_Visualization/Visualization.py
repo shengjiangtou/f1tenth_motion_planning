@@ -79,3 +79,13 @@ plt.ylabel ('Vehicle Heading')
 plt.legend()
 plt.title ('Vehicle Heading: Actual Heading vs. Raceline Heading')
 plt.show()
+
+###########   Steering Angle    #######
+plt.figure(4)
+plt.plot(data.steering_angle, linestyle ='solid',linewidth=2,color = '#005293', label = 'Actual Heading')
+#plt.plot(raceline_heading, linestyle ='dashed',linewidth=2, color = '#e37222', label = 'Raceline Heading')
+plt.xlabel ('Timesteps')
+plt.ylabel ('Steering angle in degree')
+plt.legend()
+plt.title ('Steering angle')
+plt.show()
