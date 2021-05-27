@@ -157,7 +157,7 @@ def pi_2_pi(angle):
 
     return angle
 
-class PurePursuitPlanner:
+class PathTracker:
     """
     This is the PurePursuit ALgorithm that is traccking the desired path. In this case we are following the curvature
     optimal raceline.
@@ -166,19 +166,20 @@ class PurePursuitPlanner:
     def __init__(self, conf, wb):
         self.wheelbase = wb
         self.conf = conf
-        self.load_waypoints(conf)
         self.max_reacquire = 20.
 
-    def load_waypoints(self, conf):
-        # Loading the x and y waypoints in the "..._raceline.vsv" that include the path to follow
-        self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
-
-    def _get_current_waypoint(self, waypoints, lookahead_distance, position, path):
-        # Find the current waypoint on the map and calculate the lookahead point for the controller
-        # wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
-
-        # Create waypoints based on the current frenet path
-        wpts = np.vstack((np.array(path.x), np.array(path.y))).T
+    def _get_current_waypoint(self, lookahead_distance, position, traj_set, sel_action):
+        # Check which trajectory set is available and select one
+        for sel_action in ["right", "left", "straight", "follow"]:  # try to force 'right', else try next in list
+            if sel_action in traj_set.keys():
+                break
+        print (sel_action)
+        # Extract Trajectory informtion from the current set: X-Position, Y-Position, Velocity
+        path_x = traj_set[sel_action][0][:,1]
+        path_y = traj_set[sel_action][0][:, 2]
+        velocity = traj_set[sel_action][0][:, 5]
+        # Create waypoints based on the current path
+        wpts = np.vstack((np.array(path_x), np.array(path_y))).T
 
         nearest_point, nearest_dist, t, i = nearest_point_on_trajectory(position, wpts)
         if nearest_dist < lookahead_distance:
@@ -190,16 +191,16 @@ class PurePursuitPlanner:
             # x, y
             current_waypoint[0:2] = wpts[i2, :]
             # speed
-            current_waypoint[2] = waypoints[i, self.conf.wpt_vind]
+            current_waypoint[2] = velocity[i2]
             return current_waypoint
         elif nearest_dist < self.max_reacquire:
-            return np.append(wpts[i, :], waypoints[i, self.conf.wpt_vind])
+            return np.append(wpts[i, :], velocity[i])
         else:
             return None
 
-    def plan(self, pose_x, pose_y, pose_theta, lookahead_distance, vgain, path):
+    def PurePursuit(self, pose_x, pose_y, pose_theta, lookahead_distance, vgain, traj_set, sel_action):
         position = np.array([pose_x, pose_y])
-        lookahead_point = self._get_current_waypoint(self.waypoints, lookahead_distance, position, path)
+        lookahead_point = self._get_current_waypoint(lookahead_distance, position, traj_set,sel_action)
 
         if lookahead_point is None:
             return 4.0, 0.0
@@ -284,7 +285,6 @@ class GraphBasedPlanner:
         self.obj_list_dummy = 0
 
     def initialize_planner(self,conf):
-
         # ----------------------------------------------------------------------------------------------------------------------
         # IMPORT (should not change) -------------------------------------------------------------------------------------------
         # ----------------------------------------------------------------------------------------------------------------------
@@ -335,8 +335,8 @@ class GraphBasedPlanner:
 
         # init dummy object list
         obj_list_dummy = graph_ltpl.testing_tools.src.objectlist_dummy.ObjectlistDummy(dynamic=True,
-                                                                                       vel_scale=0.3,
-                                                                                       s0=250.0)
+                                                                                       vel_scale=0.0,
+                                                                                       s0=50.0)
 
         # init sample zone (NOTE: only valid with the default track and configuration!)
         # INFO: Zones can be used to temporarily block certain regions (e.g. pit lane, accident region, dirty track, ....).
@@ -357,7 +357,7 @@ class GraphBasedPlanner:
         return ltpl_obj,traj_set, zone_example, obj_list_dummy
 
 
-    def plan(self, pose_x, pose_y, pose_theta, veloctiy):
+    def plan(self, pose_x, pose_y, pose_theta, velocity):
 
         # -- INITIALIZE PLANNER -----------------------------------------------------------------------
         if self.init_flag == 0:
@@ -367,9 +367,7 @@ class GraphBasedPlanner:
         # ----------------------------------------------------------------------------------------------------------------------
         # ONLINE LOOP ----------------------------------------------------------------------------------------------------------
         # ----------------------------------------------------------------------------------------------------------------------
-
         tic = time.time()
-
         # -- SELECT ONE OF THE PROVIDED TRAJECTORIES -----------------------------------------------------------------------
         # (here: brute-force, replace by sophisticated behavior planner)
         for sel_action in ["right", "left", "straight", "follow"]:  # try to force 'right', else try next in list
@@ -377,7 +375,20 @@ class GraphBasedPlanner:
                 break
 
         # get simple object list (one vehicle driving around the track)
+        obj1 = {'id': 1,  # id of the object
+                'type': "physical",  # type 'physical' (only class implemented so far)
+                'X': -28.0,  # x coordinate
+                'Y': -8.75,  # y coordinate
+                'theta': 1.81,  # orientation (north = 0.0)
+                'v': 0.0,  # velocity along theta
+                'length': 0.5,  # length of the object
+                'width': 0.28,  # width of the object
+                'form': 'rectangle'  # width of the object
+                }
         obj_list = self.obj_list_dummy.get_objectlist()
+        obj_list[0]['length'] = 0.50
+        obj_list[0]['width'] = 0.28
+        #obj_list = [obj1]
 
         # -- CALCULATE PATHS FOR NEXT TIMESTAMP ----------------------------------------------------------------------------
         self.ltpl_obj.calc_paths(prev_action_id=sel_action,
@@ -385,8 +396,9 @@ class GraphBasedPlanner:
                             blocked_zones=self.zone_example)
 
         # -- GET POSITION AND VELOCITY ESTIMATE OF EGO-VEHICLE -------------------------------------------------------------
+        vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
         pos_est = np.array([pose_x, pose_y])
-        vel_est = veloctiy
+        vel_est = velocity
         tic = time.time()
 
         # -- CALCULATE VELOCITY PROFILE AND RETRIEVE TRAJECTORIES ----------------------------------------------------------
@@ -395,11 +407,11 @@ class GraphBasedPlanner:
 
         # -- SEND TRAJECTORIES TO CONTROLLER -------------------------------------------------------------------------------
         # select a trajectory from the set and send it to the controller here
-        speed = traj_set['straight'][0][10][5]
-        steering_angle = 0
+
+        speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 0.8, 0.85, traj_set, sel_action)
 
         # -- LIVE PLOT (if activated - not recommended for performance use) ------------------------------------------------
-        #self.ltpl_obj.visual()
+        self.ltpl_obj.visual()
 
         # -- LOGGING -------------------------------------------------------------------------------------------------------
         self.ltpl_obj.log()
@@ -417,6 +429,7 @@ if __name__ == '__main__':
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
     env.render()
     planner = GraphBasedPlanner(conf)
+    controller = PathTracker(conf, 0.17145 + 0.15875)
 
     laptime = 0.0
     start = time.time()
