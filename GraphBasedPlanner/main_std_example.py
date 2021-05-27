@@ -391,7 +391,7 @@ class GraphBasedPlanner:
         obj_list = self.obj_list_dummy.get_objectlist()
         obj_list[0]['length'] = 0.50
         obj_list[0]['width'] = 0.28
-        #obj_list = [obj1]
+        obj_list = [obj1]
 
         # -- CALCULATE PATHS FOR NEXT TIMESTAMP ----------------------------------------------------------------------------
         self.ltpl_obj.calc_paths(prev_action_id=sel_action,
