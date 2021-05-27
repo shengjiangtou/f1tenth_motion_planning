@@ -174,6 +174,8 @@ class PathTracker:
             if sel_action in traj_set.keys():
                 break
         print (sel_action)
+        if sel_action == 'right':
+            test = 0
         # Extract Trajectory informtion from the current set: X-Position, Y-Position, Velocity
         path_x = traj_set[sel_action][0][:,1]
         path_y = traj_set[sel_action][0][:, 2]
@@ -182,6 +184,7 @@ class PathTracker:
         wpts = np.vstack((np.array(path_x), np.array(path_y))).T
 
         nearest_point, nearest_dist, t, i = nearest_point_on_trajectory(position, wpts)
+        print ('nearest distance: ', nearest_dist)
         if nearest_dist < lookahead_distance:
             lookahead_point, i2, t2 = first_point_on_trajectory_intersecting_circle(position, lookahead_distance, wpts,
                                                                                     i + t, wrap=True)
@@ -409,9 +412,10 @@ class GraphBasedPlanner:
         # select a trajectory from the set and send it to the controller here
 
         speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 0.8, 0.85, traj_set, sel_action)
+        print(speed)
 
         # -- LIVE PLOT (if activated - not recommended for performance use) ------------------------------------------------
-        self.ltpl_obj.visual()
+        #self.ltpl_obj.visual()
 
         # -- LOGGING -------------------------------------------------------------------------------------------------------
         self.ltpl_obj.log()
