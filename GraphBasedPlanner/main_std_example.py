@@ -173,9 +173,7 @@ class PathTracker:
         for sel_action in ["right", "left", "straight", "follow"]:  # try to force 'right', else try next in list
             if sel_action in traj_set.keys():
                 break
-        print (sel_action)
-        if sel_action == 'right':
-            test = 0
+
         # Extract Trajectory informtion from the current set: X-Position, Y-Position, Velocity
         path_x = traj_set[sel_action][0][:,1]
         path_y = traj_set[sel_action][0][:, 2]
@@ -184,7 +182,7 @@ class PathTracker:
         wpts = np.vstack((np.array(path_x), np.array(path_y))).T
 
         nearest_point, nearest_dist, t, i = nearest_point_on_trajectory(position, wpts)
-        print ('nearest distance: ', nearest_dist)
+        #print ('nearest distance: ', nearest_dist)
         if nearest_dist < lookahead_distance:
             lookahead_point, i2, t2 = first_point_on_trajectory_intersecting_circle(position, lookahead_distance, wpts,
                                                                                     i + t, wrap=True)
@@ -330,18 +328,23 @@ class GraphBasedPlanner:
         #heading_est = np.arctan2(np.diff(refline[0:2, 1]), np.diff(refline[0:2, 0])) - np.pi / 2
 
         pos_est = np.array([self.conf.sx, self.conf.sy])
-        heading_est = np.array([round (self.conf.stheta - math.pi/2, 7)])
+        heading_est = np.array([round(self.conf.stheta - math.pi/2, 7)])
 
         # set start pos
         ltpl_obj.set_startpos(pos_est=pos_est,
                               heading_est=heading_est)
 
-        # init dummy object list
-        obj_list_dummy = graph_ltpl.testing_tools.src.objectlist_dummy.ObjectlistDummy(dynamic=True,
-                                                                                       vel_scale=0.0,
+
+        # -- INIT DUMMY OBJECT LIST -----------------------------------------------------------------------
+        #        * dynamic: TRUE = moving object, FALSE = static object
+        #        * vel_scale: scale of velocity relativ to own vehicle
+        #        * s0 = Starting s-position along the raceline of the object (dynamic only)
+        obj_list_dummy = graph_ltpl.testing_tools.src.objectlist_dummy.ObjectlistDummy(dynamic=False,
+                                                                                       vel_scale=0.1,
                                                                                        s0=50.0)
 
-        # init sample zone (NOTE: only valid with the default track and configuration!)
+        # -- INIT SAMPLE ZONE -----------------------------------------------------------------------
+        # (NOTE: only valid with the default track and configuration!)
         # INFO: Zones can be used to temporarily block certain regions (e.g. pit lane, accident region, dirty track, ....).
         #       Each zone is specified in a as a dict entry, where the key is the zone ID and the value is a list with the cells
         #        * blocked layer numbers (in the graph) - pairwise with blocked node numbers
@@ -349,11 +352,12 @@ class GraphBasedPlanner:
         #        * numpy array holding coordinates of left bound of region (columns x and y)
         #        * numpy array holding coordinates of right bound of region (columns x and y)
 
-        zone_example = {
-            'sample_zone': [[64, 64, 64, 64, 64, 64, 64, 65, 65, 65, 65, 65, 65, 65, 66, 66, 66, 66, 66, 66, 66],
-                            [0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6],
-                            np.array([[-20.54, 227.56], [23.80, 186.64]]),
-                            np.array([[-23.80, 224.06], [20.17, 183.60]])]}
+        #zone_example = { 'sample_zone': [[64, 64, 64, 64, 64, 64, 64, 65, 65, 65, 65, 65, 65, 65, 66, 66, 66, 66, 66, 66, 66],
+        #                    [0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6],
+        #                    np.array([[-20.54, 227.56], [23.80, 186.64]]),
+        #                    np.array([[-23.80, 224.06], [20.17, 183.60]])]}
+
+        zone_example ={}
 
         traj_set = {'straight': None}
 
@@ -370,6 +374,7 @@ class GraphBasedPlanner:
         # ----------------------------------------------------------------------------------------------------------------------
         # ONLINE LOOP ----------------------------------------------------------------------------------------------------------
         # ----------------------------------------------------------------------------------------------------------------------
+
         tic = time.time()
         # -- SELECT ONE OF THE PROVIDED TRAJECTORIES -----------------------------------------------------------------------
         # (here: brute-force, replace by sophisticated behavior planner)
@@ -377,21 +382,9 @@ class GraphBasedPlanner:
             if sel_action in self.traj_set.keys():
                 break
 
+        # -- SELECT ONE OF THE PROVIDED TRAJECTORIES -----------------------------------------------------------------------
         # get simple object list (one vehicle driving around the track)
-        obj1 = {'id': 1,  # id of the object
-                'type': "physical",  # type 'physical' (only class implemented so far)
-                'X': -28.0,  # x coordinate
-                'Y': -8.75,  # y coordinate
-                'theta': 1.81,  # orientation (north = 0.0)
-                'v': 0.0,  # velocity along theta
-                'length': 0.5,  # length of the object
-                'width': 0.28,  # width of the object
-                'form': 'rectangle'  # width of the object
-                }
         obj_list = self.obj_list_dummy.get_objectlist()
-        obj_list[0]['length'] = 0.50
-        obj_list[0]['width'] = 0.28
-        obj_list = [obj1]
 
         # -- CALCULATE PATHS FOR NEXT TIMESTAMP ----------------------------------------------------------------------------
         self.ltpl_obj.calc_paths(prev_action_id=sel_action,
@@ -405,14 +398,14 @@ class GraphBasedPlanner:
         tic = time.time()
 
         # -- CALCULATE VELOCITY PROFILE AND RETRIEVE TRAJECTORIES ----------------------------------------------------------
-        traj_set = self.ltpl_obj.calc_vel_profile(pos_est=pos_est,
-                                             vel_est=vel_est)[0]
+        self.traj_set = self.ltpl_obj.calc_vel_profile(pos_est=pos_est,
+                                                       vel_est=vel_est)[0]
 
         # -- SEND TRAJECTORIES TO CONTROLLER -------------------------------------------------------------------------------
         # select a trajectory from the set and send it to the controller here
 
-        speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 0.8, 0.85, traj_set, sel_action)
-        print(speed)
+        speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 0.8, 0.85, self.traj_set, sel_action)
+        print('Planned Speed:', speed, 'Current Speed:', velocity)
 
         # -- LIVE PLOT (if activated - not recommended for performance use) ------------------------------------------------
         #self.ltpl_obj.visual()
