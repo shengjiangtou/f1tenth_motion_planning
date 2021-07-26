@@ -226,5 +226,5 @@ if __name__ == '__main__':
             logging.logging(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0], obs['lap_counts'],speed, steer)
 
     if conf_dict['logging'] == 'True':
-        pickle.dump(logging, open("datalogging.p", "wb"))
+        pickle.dump(logging, open("../Data_Visualization/datalogging.p", "wb"))
     print('Sim elapsed time:', laptime, 'Real elapsed time:', time.time()-start)
