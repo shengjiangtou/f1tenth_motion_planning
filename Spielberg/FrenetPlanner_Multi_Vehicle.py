@@ -836,8 +836,8 @@ class FrenetPlaner:
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
         # Calculate the steering angle and the speed in the controller
-        # speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 0.23, 0.50, path)
-        steering_angle = controller.Stanlycontroller(vehicle_state, path, self.csp, self.s0)
+        speed, steering_angle = controller.PurePursuitController(pose_x, pose_y, pose_theta, 0.55, 0.65, path)
+        #steering_angle = controller.Stanlycontroller(vehicle_state, path, self.csp, self.s0)
 
         # print("Current Speed: %2.2f PP Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[-1]))
 
