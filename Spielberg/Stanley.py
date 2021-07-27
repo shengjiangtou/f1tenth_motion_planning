@@ -80,7 +80,7 @@ class StanleyPlanner:
 
         self.waypoints = np.loadtxt(conf.wpt_path, delimiter=conf.wpt_delim, skiprows=conf.wpt_rowskip)
 
-    def calc_theta_and_ef(self, vehicle_state, waypoints,lap):
+    def calc_theta_and_ef(self, vehicle_state, waypoints):
         """
         calc theta and ef
         Theta is the heading of the car, this heading must be minimized
@@ -125,7 +125,7 @@ class StanleyPlanner:
 
         return theta_e, ef, target_index, goal_veloctiy
 
-    def controller(self, vehicle_state, waypoints, vgain,lap):
+    def controller(self, vehicle_state, waypoints, vgain):
         """
         Front Wheel Feedback Controller to track the path
         Based on the heading error theta_e and the crosstrack error ef we calculate the steering angle
@@ -134,7 +134,7 @@ class StanleyPlanner:
 
         k_path = 6.33010407                # Proportional gain for path control
         k_veloctiy = vgain           # Proportional gain for speed control, defined globally in the gym
-        theta_e, ef, target_index, goal_veloctiy = self.calc_theta_and_ef(vehicle_state, waypoints, lap)
+        theta_e, ef, target_index, goal_veloctiy = self.calc_theta_and_ef(vehicle_state, waypoints)
 
         # Caculate steering angle based on the cross track error to the front axle in [rad]
         cte_front = math.atan2(k_path * ef, vehicle_state[3])

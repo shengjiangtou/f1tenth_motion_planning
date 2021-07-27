@@ -211,7 +211,7 @@ class Controllers:
 
         return speed, steering_angle
 
-    def calc_theta_and_ef(self, vehicle_state, local_path, global_path, s_position):
+    def calc_theta_and_ef(self, vehicle_state, waypoints, goal_heading, goal_velocity):
         """
         calc theta and ef
         Theta is the heading of the car, this heading must be minimized
@@ -225,10 +225,8 @@ class Controllers:
         position_front_axle = np.array([fx, fy])
 
         # Find target index for the correct waypoint by finding the index with the lowest distance value/hypothenuses
-        # wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
-        # Create waypoints based on the current frenet path
-        wpts = np.vstack((np.array(local_path.x), np.array(local_path.y))).T
-        nearest_point_front, nearest_dist, t, target_index = nearest_point_on_trajectory(position_front_axle, wpts)
+        #wpts = np.vstack((self.waypoints[:, self.conf.wpt_xind], self.waypoints[:, self.conf.wpt_yind])).T
+        nearest_point_front, nearest_dist, t, target_index = nearest_point_on_trajectory(position_front_axle, waypoints)
 
         # Calculate the Distances from the front axle to all the waypoints
         distance_nearest_point_x = fx - nearest_point_front[0]
@@ -246,33 +244,53 @@ class Controllers:
         ef = np.dot(vec_dist_nearest_point.T, front_axle_vec_rot_90)
 
         #############  Calculate the heading error theta_e  normalized to an angle to [-pi, pi]     ##########
-        # Extract the optimal heading on the optimal raceline
+        # Extract heading on the raceline
         # BE CAREFUL: If your raceline is based on a different coordinate system you need to -+ pi/2 = 90 degrees
-        s_index = np.argmin(abs(global_path.s- (s_position)))
-        theta_raceline = self.waypoints[s_index][3]
+        theta_raceline = goal_heading[target_index] + np.pi/2
 
         # Calculate the heading error by taking the difference between current and goal + Normalize the angles
         theta_e = pi_2_pi(theta_raceline - vehicle_state[2])
 
-        return theta_e, ef
+        # Calculate the target Veloctiy for the desired state
+        planned_veloctiy = goal_velocity[target_index]
 
-    def Stanlycontroller(self, vehicle_state, local_path, global_path, s_position):
+        return theta_e, ef, target_index, planned_veloctiy
+
+    def StanleyController(self, pose_x, pose_y, pose_theta, current_velocity, vgain, traj_set, sel_action):
         """
         Front Wheel Feedback Controller to track the path
         Based on the heading error theta_e and the crosstrack error ef we calculate the steering angle
         Returns the optimal steering angle delta is P-Controller with the proportional gain k
         """
 
-        k_path = 6.33010407  # Proportional gain for path control
-        theta_e, ef = self.calc_theta_and_ef(vehicle_state, local_path, global_path, s_position)
+        # Check which trajectory set is available and select one
+        for sel_action in ["right", "left", "straight", "follow"]:  # try to force 'right', else try next in list
+            if sel_action in traj_set.keys():
+                break
+
+        # Extract Trajectory informtion from the current set: X-Position, Y-Position, Velocity
+        path_x = traj_set[sel_action][0][:, 1]
+        path_y = traj_set[sel_action][0][:, 2]
+        heading = traj_set[sel_action][0][:, 3]
+        velocity = traj_set[sel_action][0][:, 5]
+        # Create waypoints based on the current path
+        wpts = np.vstack((np.array(path_x), np.array(path_y))).T
+
+        k_path = 5.33010407  # Proportional gain for path control
+        vehicle_state = np.array([pose_x, pose_y, pose_theta, current_velocity])
+        theta_e, ef, target_index, goal_velocity = self.calc_theta_and_ef(vehicle_state, wpts, heading, velocity)
 
         # Caculate steering angle based on the cross track error to the front axle in [rad]
-        cte_front = math.atan2(k_path * ef[0], vehicle_state[3])
+        cte_front = math.atan2(k_path * ef, vehicle_state[2])
 
-        # Calculate final steering angle/ control input in [rad]: Steering Angle based on distance error + heading error
-        delta = cte_front + theta_e
+        # Calculate final steering angle/ control input in [rad]: Steering Angle based on error + heading error
+        steering_angle = cte_front + theta_e
 
-        return delta
+        # Calculate final speed control input in [m/s]:
+        # speed_diff = k_veloctiy * (goal_veloctiy-velocity)
+        speed = goal_velocity * vgain
+
+        return steering_angle, speed
 
 
 class GraphBasedPlanner:
@@ -339,7 +357,7 @@ class GraphBasedPlanner:
         #        * dynamic: TRUE = moving object, FALSE = static object
         #        * vel_scale: scale of velocity relativ to own vehicle
         #        * s0 = Starting s-position along the raceline of the object (dynamic only)
-        obj_list_dummy = graph_ltpl.testing_tools.src.objectlist_dummy.ObjectlistDummy(dynamic=True,
+        obj_list_dummy = graph_ltpl.testing_tools.src.objectlist_dummy.ObjectlistDummy(dynamic=False,
                                                                                        vel_scale=0.5,
                                                                                        s0=50.0)
 
@@ -402,7 +420,7 @@ class GraphBasedPlanner:
                                                        vel_est=vel_est)[0]
 
         # -- LIVE PLOT (if activated - not recommended for performance use) ------------------------------------------------
-        self.ltpl_obj.visual()
+        #self.ltpl_obj.visual()
 
         # -- LOGGING -------------------------------------------------------------------------------------------------------
         self.ltpl_obj.log()
@@ -415,6 +433,8 @@ class GraphBasedPlanner:
         # select a trajectory from the set and send it to the controller here
 
         speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 0.8, 0.85, traj_set, sel_action)
+        #steering_angle, speed = controller.StanleyController(pose_x, pose_y, pose_theta,velocity, 0.50, traj_set, sel_action)
+
         print('Planned Speed:', speed, 'Current Speed:', velocity)
 
         return speed, steering_angle
