@@ -449,16 +449,16 @@ class GraphBasedPlanner:
         obj_list = self.obj_list_dummy.get_objectlist()
         obj_list[0]['X'] = obstacle1[0]
         obj_list[0]['Y'] = obstacle1[1]
-        obj_list[0]['theta'] = obstacle1[2]
+        obj_list[0]['theta'] = obstacle1[2] - np.pi/2
         obj_list[0]['v'] = obstacle1[3]
 
         # -- CALCULATE PATHS FOR NEXT TIMESTAMP ------------------------------------------------------------------------
         self.ltpl_obj.calc_paths(prev_action_id=sel_action,
-                            object_list=obj_list,
-                            blocked_zones=self.zone_example)
+                                 object_list=obj_list,
+                                 blocked_zones=self.zone_example)
 
         # -- GET POSITION AND VELOCITY ESTIMATE OF EGO-VEHICLE ---------------------------------------------------------
-        vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
+        # vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
         pos_est = np.array([pose_x, pose_y])
         vel_est = velocity
         tic = time.time()
@@ -468,21 +468,21 @@ class GraphBasedPlanner:
                                                        vel_est=vel_est)[0]
 
         # -- LIVE PLOT (if activated - not recommended for performance use) --------------------------------------------
-        self.ltpl_obj.visual()
+        #self.ltpl_obj.visual()
 
         # -- LOGGING ---------------------------------------------------------------------------------------------------
         self.ltpl_obj.log()
 
         return self.traj_set, sel_action
 
-    def control(self, pose_x, pose_y, pose_theta, velocity, traj_set, sel_action):
+    def control(self, pose_x, pose_y, pose_theta, current_velocity, traj_set, sel_action):
 
         # -- SEND TRAJECTORIES TO CONTROLLER -------------------------------------------------------------------------------
         # select a trajectory from the set and send it to the controller here
 
         # Fast Setup: lookehead: 1.05, vgain: 0.92
-        speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 1.05, 0.80, traj_set, sel_action)
-        #steering_angle, speed = controller.StanleyController(pose_x, pose_y, pose_theta,velocity, 0.50, traj_set, sel_action)
+        speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 0.95, 0.80, traj_set, sel_action)
+        #steering_angle, speed = controller.StanleyController(pose_x, pose_y, pose_theta, current_velocity, 0.50, traj_set, sel_action)
 
         #print('Planned Speed:', speed, 'Current Speed:', velocity)
 
@@ -491,7 +491,7 @@ class GraphBasedPlanner:
 
 if __name__ == '__main__':
 
-    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.5038203837889}
+    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.40}
     with open('config_Spielberg_map.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)
@@ -503,7 +503,6 @@ if __name__ == '__main__':
     controller = Controllers(conf, 0.17145 + 0.15875)
     planner2 = PurePursuitPlanner(conf, 0.17145 + 0.15875)
 
-
     laptime = 0.0
     control_count = 15
     start = time.time()
@@ -511,7 +510,7 @@ if __name__ == '__main__':
     while not done:
 
         if control_count == 15:
-            # Get and gather information about the obstacle
+            # Get and gather information about the obstacles
             obstacle1 = [obs['poses_x'][1], obs['poses_y'][1], obs['poses_theta'][1],obs['linear_vels_x'][0]]
             # Run graph based planner. Receive set of trajectories and final selection
             traj_set, sel_action = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0],obs['linear_vels_x'][0],obstacle1)
