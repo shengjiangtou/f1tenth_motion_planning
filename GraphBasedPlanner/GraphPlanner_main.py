@@ -384,45 +384,45 @@ class GraphBasedPlanner:
 
     def plan(self, pose_x, pose_y, pose_theta, velocity):
 
-        # -- INITIALIZE PLANNER -----------------------------------------------------------------------
+        # -- INITIALIZE PLANNER ----------------------------------------------------------------------------------------
         if self.init_flag == 0:
             self.ltpl_obj,self.traj_set, self.zone_example, self.obj_list_dummy = self.initialize_planner(self.conf)
             self.init_flag =1
 
-        # ----------------------------------------------------------------------------------------------------------------------
-        # ONLINE LOOP ----------------------------------------------------------------------------------------------------------
-        # ----------------------------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
+        # ONLINE LOOP --------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
 
         tic = time.time()
-        # -- SELECT ONE OF THE PROVIDED TRAJECTORIES -----------------------------------------------------------------------
+        # -- SELECT ONE OF THE PROVIDED TRAJECTORIES -------------------------------------------------------------------
         # (here: brute-force, replace by sophisticated behavior planner)
         for sel_action in ["right", "left", "straight", "follow"]:  # try to force 'right', else try next in list
             if sel_action in self.traj_set.keys():
                 break
 
-        # -- SELECT ONE OF THE PROVIDED TRAJECTORIES -----------------------------------------------------------------------
-        # get simple object list (one vehicle driving around the track)
+        # -- OBJECT LIST: GET INFORMATION ABOUT STATIC OR DYNAMIC OBSTACLES --------------------------------------------
+        # Get simple object list
         obj_list = self.obj_list_dummy.get_objectlist()
 
-        # -- CALCULATE PATHS FOR NEXT TIMESTAMP ----------------------------------------------------------------------------
+        # -- CALCULATE PATHS FOR NEXT TIMESTAMP ------------------------------------------------------------------------
         self.ltpl_obj.calc_paths(prev_action_id=sel_action,
                             object_list=obj_list,
                             blocked_zones=self.zone_example)
 
-        # -- GET POSITION AND VELOCITY ESTIMATE OF EGO-VEHICLE -------------------------------------------------------------
+        # -- GET POSITION AND VELOCITY ESTIMATE OF EGO-VEHICLE ---------------------------------------------------------
         vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
         pos_est = np.array([pose_x, pose_y])
         vel_est = velocity
         tic = time.time()
 
-        # -- CALCULATE VELOCITY PROFILE AND RETRIEVE TRAJECTORIES ----------------------------------------------------------
+        # -- CALCULATE VELOCITY PROFILE AND RETRIEVE TRAJECTORIES ------------------------------------------------------
         self.traj_set = self.ltpl_obj.calc_vel_profile(pos_est=pos_est,
                                                        vel_est=vel_est)[0]
 
-        # -- LIVE PLOT (if activated - not recommended for performance use) ------------------------------------------------
+        # -- LIVE PLOT (if activated - not recommended for performance use) --------------------------------------------
         #self.ltpl_obj.visual()
 
-        # -- LOGGING -------------------------------------------------------------------------------------------------------
+        # -- LOGGING ---------------------------------------------------------------------------------------------------
         self.ltpl_obj.log()
 
         return self.traj_set, sel_action
@@ -432,13 +432,13 @@ class GraphBasedPlanner:
         # -- SEND TRAJECTORIES TO CONTROLLER -------------------------------------------------------------------------------
         # select a trajectory from the set and send it to the controller here
 
-        speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 0.8, 0.85, traj_set, sel_action)
+        # Fast Setup: lookehead: 1.05, vgain: 0.92
+        speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 1.05, 0.92, traj_set, sel_action)
         #steering_angle, speed = controller.StanleyController(pose_x, pose_y, pose_theta,velocity, 0.50, traj_set, sel_action)
 
-        print('Planned Speed:', speed, 'Current Speed:', velocity)
+        #print('Planned Speed:', speed, 'Current Speed:', velocity)
 
         return speed, steering_angle
-
 
 
 if __name__ == '__main__':
