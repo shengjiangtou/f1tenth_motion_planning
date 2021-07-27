@@ -157,7 +157,7 @@ def pi_2_pi(angle):
 
     return angle
 
-class PathTracker:
+class Controllers:
     """
     This is the PurePursuit ALgorithm that is traccking the desired path. In this case we are following the curvature
     optimal raceline.
@@ -339,8 +339,8 @@ class GraphBasedPlanner:
         #        * dynamic: TRUE = moving object, FALSE = static object
         #        * vel_scale: scale of velocity relativ to own vehicle
         #        * s0 = Starting s-position along the raceline of the object (dynamic only)
-        obj_list_dummy = graph_ltpl.testing_tools.src.objectlist_dummy.ObjectlistDummy(dynamic=False,
-                                                                                       vel_scale=0.1,
+        obj_list_dummy = graph_ltpl.testing_tools.src.objectlist_dummy.ObjectlistDummy(dynamic=True,
+                                                                                       vel_scale=0.5,
                                                                                        s0=50.0)
 
         # -- INIT SAMPLE ZONE -----------------------------------------------------------------------
@@ -401,19 +401,25 @@ class GraphBasedPlanner:
         self.traj_set = self.ltpl_obj.calc_vel_profile(pos_est=pos_est,
                                                        vel_est=vel_est)[0]
 
-        # -- SEND TRAJECTORIES TO CONTROLLER -------------------------------------------------------------------------------
-        # select a trajectory from the set and send it to the controller here
-
-        speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 0.8, 0.85, self.traj_set, sel_action)
-        print('Planned Speed:', speed, 'Current Speed:', velocity)
-
         # -- LIVE PLOT (if activated - not recommended for performance use) ------------------------------------------------
-        #self.ltpl_obj.visual()
+        self.ltpl_obj.visual()
 
         # -- LOGGING -------------------------------------------------------------------------------------------------------
         self.ltpl_obj.log()
 
+        return self.traj_set, sel_action
+
+    def control(self, pose_x, pose_y, pose_theta, velocity, traj_set, sel_action):
+
+        # -- SEND TRAJECTORIES TO CONTROLLER -------------------------------------------------------------------------------
+        # select a trajectory from the set and send it to the controller here
+
+        speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 0.8, 0.85, traj_set, sel_action)
+        print('Planned Speed:', speed, 'Current Speed:', velocity)
+
         return speed, steering_angle
+
+
 
 if __name__ == '__main__':
 
@@ -426,13 +432,20 @@ if __name__ == '__main__':
     obs, step_reward, done, info = env.reset(np.array([[conf.sx, conf.sy, conf.stheta]]))
     env.render()
     planner = GraphBasedPlanner(conf)
-    controller = PathTracker(conf, 0.17145 + 0.15875)
+    controller = Controllers(conf, 0.17145 + 0.15875)
 
     laptime = 0.0
+    control_count = 15
     start = time.time()
 
     while not done:
-        speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0],obs['linear_vels_x'][0])
+
+        if control_count == 15:
+            traj_set, sel_action = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0],obs['linear_vels_x'][0])
+            control_count = 0
+
+        speed, steer = planner.control(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0],obs['linear_vels_x'][0],traj_set, sel_action)
+        control_count = control_count + 1
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed]]))
         laptime += step_reward
