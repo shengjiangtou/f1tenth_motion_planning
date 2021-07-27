@@ -9,21 +9,21 @@ map_path: './Spielberg_map'
 map_ext: '.png'
 
 # starting pose for map  sx: -0.0440806 sy: -0.8491629
-# Start\ Finish Line: -0.0440806; -0.8491629;3.4034118;
+# Start\ Finish Line: -0.0440806; -0.8491629; 3.4034118;
 # T1 (Niki Lauda): -26.8810112; -8.0811682; 3.3949863;
-# T2 (Remus):
+# T2 (Remus): -72.7851387; 47.1581236; 2.3546648
 # T3 (Schlossgold):
 # T4 (Rauch):
 # T5 (Wuerth):
 # T7 (Rindt):
 # Middle section: -51.7582509;52.9369422;6.1060188;
 sx: -0.0440806
-sy: -0.8491629
+sy: -0.849162
 stheta: 3.4034118
 
-sx2: -9.8810112
-sy2: -3.1810112
-stheta2: 3.4034118
+sx2: -26.8810112
+sy2: -8.0811682
+stheta2: 3.3949863
 
 sx3: 2.6599770
 sy3: -0.1246830

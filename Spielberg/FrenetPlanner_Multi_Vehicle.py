@@ -351,6 +351,8 @@ class FrenetControllers:
         self.conf = conf
         self.load_waypoints(conf)
         self.max_reacquire = 20.
+        self.vehicle_control_e_f = 0  # Control error
+        self.vehicle_control_error3 = 0
 
     def load_waypoints(self, conf):
         # Loading the x and y waypoints in the "..._raceline.vsv" that include the path to follow
@@ -442,16 +444,33 @@ class FrenetControllers:
         Front Wheel Feedback Controller to track the path
         Based on the heading error theta_e and the crosstrack error ef we calculate the steering angle
         Returns the optimal steering angle delta is P-Controller with the proportional gain k
+
+        Enhanced Version: StanleyPID
         """
 
-        k_path = 9.33010407  # Proportional gain for path control
+        kp = 10.33010407            # Proportional gain for path control
+        kd = 1.45                   # Differential gain
+        ki = 0.6                    # Integral gain
         theta_e, ef = self.calc_theta_and_ef(vehicle_state, local_path, global_path, s_position)
 
+        # PID Part: This is Stanly with Integral (I) and Differential (D) calculations
         # Caculate steering angle based on the cross track error to the front axle in [rad]
-        cte_front = math.atan2(k_path * ef[0], vehicle_state[3])
+        # error1 = (kp * ef[0])
+        # error2 = (kd * (ef[0] - self.vehicle_control_e_f) / 0.01)
+        # error3 = self.vehicle_control_error3 + (ki * ef[0] * 0.01)
+        # error = error1 + error2 + error3
+        # cte_front = math.atan2(error, vehicle_state[3])
+        #self.vehicle_control_e_f = ef
+        #self.vehicle_control_error3 = error3
+
+        # Classical Stanley: This is Stanly only with Proportional (P) calculations
+        # Caculate steering angle based on the cross track error to the front axle in [rad]
+        cte_front = math.atan2(kp * ef[0], vehicle_state[3])
 
         # Calculate final steering angle/ control input in [rad]: Steering Angle based on distance error + heading error
         delta = cte_front + theta_e
+
+
 
         return delta
 
@@ -536,7 +555,7 @@ class FrenetPlaner:
         return True
 
     def check_collision(self, fp, ob):
-        ROBOT_RADIUS = 0.6  # robot radius [m]
+        ROBOT_RADIUS = 0.5  # robot radius [m]
 
         for i in range(len(ob[:, 0])):
             d = [((ix - ob[i, 0]) ** 2 + (iy - ob[i, 1]) ** 2)
@@ -595,21 +614,21 @@ class FrenetPlaner:
         #############################      Define  Parameter        #############################################
 
         # Parameter for the path creation
-        MAX_PATH_WIDTH_LEFT = -0.00         # Maximum planning with to the left [m]
-        MAX_PATH_WIDTH_RIGHT = 1.50         # Maximum planning with to the right [m]
-        D_ROAD_W = 0.15                     # Sampling length along the width of the track [m]
-        MAX_T = 1.7                         # Max prediction time for the path horizon [m]
-        MIN_T = 1.3                         # Min prediction time for the path horizon [m]
+        MAX_PATH_WIDTH_LEFT = -1.25         # Maximum planning with to the left [m]
+        MAX_PATH_WIDTH_RIGHT = 1.25         # Maximum planning with to the right [m]
+        D_ROAD_W = 0.10                     # Sampling length along the width of the track [m]
+        MAX_T = 2.0                         # Max prediction time for the path horizon [m]
+        MIN_T = 1.5                         # Min prediction time for the path horizon [m]
         DT = 0.2                            # Sampling time [s]
         D_T_S = 0.10                        # Target speed sampling length [m/s]
         N_S_SAMPLE = 1                      # Sampling number of target speed
 
         # Parameter for the weights for the cost for the individual frenet paths
-        K_J = 0.1           # Weights for Jerk
-        K_T = 0.1           # Weights for Time
-        K_D = 100.0         # Weights for Deviation from the global, optimal raceline
-        K_LAT = 1.0         # Weights for
-        K_LON = 50.0        # Weights for
+        K_J = 0.1                           # Weights for Jerk
+        K_T = 0.1                           # Weights for Time
+        K_D = 100.0                         # Weights for Deviation from the global, optimal raceline
+        K_LAT = 1.0                         # Weights for
+        K_LON = 50.0                        # Weights for
 
         #############################      Precalculations         #############################################
 
@@ -806,10 +825,15 @@ class FrenetPlaner:
         # Detect Obstacles on the track [[x-position, y-position]]
         # obstacles = np.array([[-9.5, -3.4]])                          # Static obstacle
         # obstacles = np.array([])                                      # No obstacle
-        obstacles = np.array([[obs1_x, obs1_y]])                             # Dynamic Obstacle
+        obstacles = np.array([[obs1_x, obs1_y]])                        # Dynamic Obstacle
 
         # Calculate the optimal path in the frenet frame
         path = self.path_planner(vehicle_state, obstacles)
+
+        return path
+
+    def control(self, pose_x, pose_y, pose_theta, velocity, path):
+        vehicle_state = np.array([pose_x, pose_y, pose_theta, velocity])
 
         # Calculate the steering angle and the speed in the controller
         # speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 0.23, 0.50, path)
@@ -818,7 +842,7 @@ class FrenetPlaner:
         # print("Current Speed: %2.2f PP Speed: %2.2f Frenet Speed %2.2f" %(velocity, speed, path.s_d[-1]))
 
         # Use the speed from the Frenet Planer calculation and add a gain to it
-        speed = path.s_d[-1] * 0.45
+        speed = path.s_d[-1] * 0.40
 
         return speed, steering_angle
 
@@ -843,13 +867,19 @@ if __name__ == '__main__':
     logging = Datalogger(conf)
 
     laptime = 0.0
+    control_count = 15
     start = time.time()
 
     while not done:
-        speed, steer = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0],
-                                    obs['linear_vels_x'][0], obs['poses_x'][1], obs['poses_y'][1])
 
-        speed2, steer2 = planner2.plan(obs['poses_x'][1], obs['poses_y'][1], obs['poses_theta'][1], work['tlad'], work['vgain'])
+        if control_count == 15:
+            path = planner.plan(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0],obs['linear_vels_x'][0], obs['poses_x'][1], obs['poses_y'][1])
+            control_count = 0
+
+        speed, steer = planner.control(obs['poses_x'][0], obs['poses_y'][0], obs['poses_theta'][0], obs['linear_vels_x'][0],path)
+        speed2, steer2 = planner2.plan(obs['poses_x'][1], obs['poses_y'][1], obs['poses_theta'][1], work['tlad'],
+                                       work['vgain'])
+        control_count = control_count + 1
 
         obs, step_reward, done, info = env.step(np.array([[steer, speed],[steer2, speed2]]))
         laptime += step_reward

@@ -130,14 +130,14 @@ class StanleyPlanner:
         Returns the optimal steering angle delta is P-Controller with the proportional gain k
         """
 
-        k_path = 12.2                 # Proportional gain for path control
-        kd = 1.45                    # Integral gain
-        ki = 0.5
+        k_p = 12.2                      # Proportional gain for path control
+        kd = 1.45                    # Differential gain
+        ki = 0.5                     # Integral gain
         k_veloctiy = vgain           # Proportional gain for speed control, defined globally in the gym
         theta_e, ef, target_index, goal_veloctiy = self.calc_theta_and_ef(vehicle_state, waypoints)
 
         # Caculate steering angle based on the cross track error to the front axle in [rad]
-        error1 = (k_path * ef[0])
+        error1 = (k_p * ef[0])
         error2 = (kd * (ef[0] - self.vehicle_control_e_f)/0.01)
         error3 = self.vehicle_control_error3 + (ki*ef[0]*0.01)
         error = error1 + error2 + error3
