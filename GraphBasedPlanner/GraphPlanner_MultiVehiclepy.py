@@ -211,6 +211,8 @@ class Controllers:
         self.wheelbase = wb
         self.conf = conf
         self.max_reacquire = 20.
+        self.vehicle_control_e_f = 0            # Control error
+        self.vehicle_control_error3 = 0
 
     def _get_current_waypoint(self, lookahead_distance, position, traj_set, sel_action):
         # Check which trajectory set is available and select one
@@ -320,12 +322,26 @@ class Controllers:
         # Create waypoints based on the current path
         wpts = np.vstack((np.array(path_x), np.array(path_y))).T
 
-        k_path = 5.33010407  # Proportional gain for path control
+        kp = 8.63010407                    # Proportional gain for path control
+        kd = 1.45                           # Differential gain
+        ki = 0.6                            # Integral gain
+
         vehicle_state = np.array([pose_x, pose_y, pose_theta, current_velocity])
         theta_e, ef, target_index, goal_velocity = self.calc_theta_and_ef(vehicle_state, wpts, heading, velocity)
 
+        # PID Part: This is Stanly with Integral (I) and Differential (D) calculations
         # Caculate steering angle based on the cross track error to the front axle in [rad]
-        cte_front = math.atan2(k_path * ef, vehicle_state[2])
+        error1 = (kp * ef[0])
+        error2 = (kd * (ef[0] - self.vehicle_control_e_f) / 0.01)
+        error3 = self.vehicle_control_error3 + (ki * ef[0] * 0.01)
+        error = error1 + error2 + error3
+        cte_front = math.atan2(error, vehicle_state[3])
+        self.vehicle_control_e_f = ef
+        self.vehicle_control_error3 = error3
+
+        # Classical Stanley: This is Stanly only with Proportional (P) calculations
+        # Caculate steering angle based on the cross track error to the front axle in [rad]
+        # cte_front = math.atan2(kp * ef, vehicle_state[3])
 
         # Calculate final steering angle/ control input in [rad]: Steering Angle based on error + heading error
         steering_angle = cte_front + theta_e
@@ -468,7 +484,7 @@ class GraphBasedPlanner:
                                                        vel_est=vel_est)[0]
 
         # -- LIVE PLOT (if activated - not recommended for performance use) --------------------------------------------
-        #self.ltpl_obj.visual()
+        self.ltpl_obj.visual()
 
         # -- LOGGING ---------------------------------------------------------------------------------------------------
         self.ltpl_obj.log()
@@ -481,8 +497,8 @@ class GraphBasedPlanner:
         # select a trajectory from the set and send it to the controller here
 
         # Fast Setup: lookehead: 1.05, vgain: 0.92
-        speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 0.95, 0.80, traj_set, sel_action)
-        #steering_angle, speed = controller.StanleyController(pose_x, pose_y, pose_theta, current_velocity, 0.50, traj_set, sel_action)
+        #speed, steering_angle = controller.PurePursuit(pose_x, pose_y, pose_theta, 1.05, 0.80, traj_set, sel_action)
+        steering_angle, speed = controller.StanleyController(pose_x, pose_y, pose_theta, current_velocity, 0.95, traj_set, sel_action)
 
         #print('Planned Speed:', speed, 'Current Speed:', velocity)
 
@@ -491,7 +507,7 @@ class GraphBasedPlanner:
 
 if __name__ == '__main__':
 
-    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.40}
+    work = {'mass': 3.463388126201571, 'lf': 0.15597534362552312, 'tlad': 0.82461887897713965, 'vgain': 0.65}
     with open('config_Spielberg_map.yaml') as file:
         conf_dict = yaml.load(file, Loader=yaml.FullLoader)
     conf = Namespace(**conf_dict)

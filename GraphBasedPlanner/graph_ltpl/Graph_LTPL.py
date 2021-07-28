@@ -346,9 +346,9 @@ class Graph_LTPL(object):
                          vel_est: float,
                          vel_max: float = 100.0,
                          gg_scale: np.ndarray = 1.0,
-                         local_gg: dict = (5.0, 5.0),
+                         local_gg: dict = (5.0, 6.0),
                          ax_max_machines: np.ndarray = np.atleast_2d([100.0, 5.0]),
-                         safety_d: float = 5.0,
+                         safety_d: float = 2.5,
                          incl_emerg_traj: bool = False) -> tuple:
         """
         Calculate velocity profile for current given paths and trim to closest point on trajectory to "pos_est".
